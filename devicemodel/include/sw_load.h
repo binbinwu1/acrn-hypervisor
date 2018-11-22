@@ -57,6 +57,7 @@ extern const struct e820_entry e820_default_entries[NUM_E820_ENTRIES];
 extern int with_bootargs;
 
 size_t ovmf_image_size(void);
+size_t rit_bios_size(void);
 
 int acrn_parse_kernel(char *arg);
 int acrn_parse_ramdisk(char *arg);
@@ -65,6 +66,7 @@ int acrn_parse_gvtargs(char *arg);
 int acrn_parse_vsbl(char *arg);
 int acrn_parse_ovmf(char *arg);
 int acrn_parse_elf(char *arg);
+int acrn_parse_rit(char *arg);
 int acrn_parse_guest_part_info(char *arg);
 char *get_bootargs(void);
 void vsbl_set_bdf(int bnum, int snum, int fnum);
@@ -78,6 +80,7 @@ int acrn_sw_load_bzimage(struct vmctx *ctx);
 int acrn_sw_load_elf(struct vmctx *ctx);
 int acrn_sw_load_vsbl(struct vmctx *ctx);
 int acrn_sw_load_ovmf(struct vmctx *ctx);
+int acrn_sw_load_rit(struct vmctx *ctx);
 int acrn_sw_load(struct vmctx *ctx);
 #endif
 
