@@ -84,6 +84,7 @@ char *vsbl_file_name;
 char *ovmf_file_name;
 char *kernel_file_name;
 char *elf_file_name;
+char *rit_file_name;
 uint8_t trusty_enabled;
 char *mac_seed;
 bool stdio_in_use;
@@ -246,6 +247,8 @@ high_bios_size(void)
 
 	if (ovmf_file_name)
 		size = ovmf_image_size();
+	else if (rit_file_name)
+		size = rit_bios_size();
 
 	return roundup2(size, 2 * MB);
 }
@@ -679,6 +682,7 @@ sig_handler_term(int signo)
 enum {
 	CMD_OPT_VSBL = 1000,
 	CMD_OPT_OVMF,
+	CMD_OPT_RIT,
 	CMD_OPT_PART_INFO,
 	CMD_OPT_TRUSTY_ENABLE,
 	CMD_OPT_VIRTIO_POLL_ENABLE,
@@ -717,6 +721,7 @@ static struct option long_options[] = {
 #endif
 	{"vsbl",		required_argument,	0, CMD_OPT_VSBL},
 	{"ovmf",		required_argument,	0, CMD_OPT_OVMF},
+	{"rit",			required_argument,	0, CMD_OPT_RIT},
 	{"part_info",		required_argument,	0, CMD_OPT_PART_INFO},
 	{"enable_trusty",	no_argument,		0,
 					CMD_OPT_TRUSTY_ENABLE},
@@ -840,6 +845,11 @@ dm_run(int argc, char *argv[])
 				exit(1);
 			}
 			break;
+		case CMD_OPT_RIT:
+			if (acrn_parse_rit(optarg) != 0) {
+				errx(EX_USAGE, "invalid rit param %s", optarg);
+				exit(1);
+			}
 		case CMD_OPT_PART_INFO:
 			if (acrn_parse_guest_part_info(optarg) != 0) {
 				errx(EX_USAGE,
