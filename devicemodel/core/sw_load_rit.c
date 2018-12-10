@@ -175,7 +175,7 @@ static int load_seed(struct vmctx *ctx, char* path)
 				}
 			} else {
 				fseek(fp, length, SEEK_CUR);
-				printf("SW_LOAD: skip object type %d,  0x%lx bytes @ 0x%lx\r\n", id, length, address);
+				printf("SW_LOAD: skip object type 0x%x,  0x%lx bytes @ 0x%lx\r\n", id, length, address);
 			}
 		} else {
 			printf("SW_LOAD: Cannot load object to non-memory region!\r\n");

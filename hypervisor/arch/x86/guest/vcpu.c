@@ -397,6 +397,8 @@ int32_t create_vcpu(uint16_t pcpu_id, struct acrn_vm *vm, struct acrn_vcpu **rtn
 	return 0;
 }
 
+extern void debug_dump_guest_cpu_regs(struct acrn_vcpu *vcpu);
+
 /*
  *  @pre vcpu != NULL
  */
@@ -492,8 +494,10 @@ int32_t run_vcpu(struct acrn_vcpu *vcpu)
 		/* refer to 64-ia32 spec section 24.9.1 volume#3 */
 		if (vcpu->arch.exit_reason & VMX_VMENTRY_FAIL)
 			pr_fatal("vmentry fail reason=%lx", vcpu->arch.exit_reason);
-		else
-			pr_fatal("vmexit fail err_inst=%x", exec_vmread32(VMX_INSTR_ERROR));
+		else {
+			pr_fatal("vmexit fail err_inst=%x, exit_reason=%lx", exec_vmread32(VMX_INSTR_ERROR), vcpu->arch.exit_reason);
+			debug_dump_guest_cpu_regs(vcpu);
+		}
 
 		ASSERT(status == 0, "vm fail");
 	}
