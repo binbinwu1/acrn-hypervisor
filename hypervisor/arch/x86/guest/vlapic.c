@@ -1777,10 +1777,16 @@ vlapic_set_apicbase(struct acrn_vlapic *vlapic, uint64_t new)
 			switch_apicv_mode_x2apic(vlapic->vcpu);
 			ret = 0;
 	} else if (vlapic->msr_apicbase != new) {
-		dev_dbg(ACRN_DBG_LAPIC,
-			"NOT support to change APIC_BASE MSR from %#lx to %#lx",
-			vlapic->msr_apicbase, new);
-		ret = -1;
+		if ((vlapic->msr_apicbase ^ new) != APICBASE_ENABLED) {
+			pr_err("NOT support to change APIC_BASE MSR from %#lx to %#lx",
+				vlapic->msr_apicbase, new);
+			ret = -1;
+		} else {
+			vlapic->msr_apicbase = new;
+			if (!is_vm0(vlapic->vm))
+				pr_err("%s: 0x%llx", __func__, new);
+			ret = 0;
+		}
 	}
 
 	return ret;
@@ -2218,8 +2224,7 @@ vlapic_wrmsr(struct acrn_vcpu *vcpu, uint32_t msr, uint64_t wval)
 			error = vlapic_x2apic_access(vcpu, msr, true, &wval);
 		} else {
 			error = -1;
-			dev_dbg(ACRN_DBG_LAPIC,
-				"Invalid vlapic msr 0x%x access\n", msr);
+			pr_err("Invalid vlapic msr 0x%x access\n", msr);
 		}
 		break;
 	}
