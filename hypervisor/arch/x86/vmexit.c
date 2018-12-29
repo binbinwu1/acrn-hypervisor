@@ -152,50 +152,76 @@ static const struct vm_exit_dispatch dispatch_table[NR_VMX_EXIT_REASONS] = {
 		.handler = unhandled_vmexit_handler}
 };
 
+void debug_dump_host_state(void)
+{
+	uint64_t flags;
+	uint64_t host_cr0, host_cr3, host_cr4, host_rsp;
+	uint16_t cs_sel;
+	uint16_t ds_sel;
+	uint16_t ss_sel;
+	uint16_t es_sel;
+	uint16_t fs_sel;
+	uint16_t gs_sel;
+
+	asm volatile("pushfq; popq %0" :"=m"(flags));
+	asm volatile("mov %%cr0, %0" : "=r" (host_cr0));
+	asm volatile("mov %%cr3, %0" : "=r" (host_cr3));
+	asm volatile("mov %%cr4, %0" : "=r" (host_cr4));
+	asm volatile("mov %%rsp, %0" : "=r" (host_rsp));
+	CPU_SEG_READ(cs, &cs_sel);
+	CPU_SEG_READ(ds, &ds_sel);
+	CPU_SEG_READ(ss, &ss_sel);
+	CPU_SEG_READ(es, &es_sel);
+	CPU_SEG_READ(fs, &fs_sel);
+	CPU_SEG_READ(gs, &gs_sel);
+	// asm volatile("mov %%cs, %0" : "=r" (cs_sel));
+	// asm volatile("mov %%ds, %0" : "=r" (ds_sel));
+	// asm volatile("mov %%ss, %0" : "=r" (ss_sel));
+	// asm volatile("mov %%es, %0" : "=r" (es_sel));
+	// asm volatile("mov %%fs, %0" : "=r" (fs_sel));
+	// asm volatile("mov %%gs, %0" : "=r" (gs_sel));
+	pr_err("DEBUG: =  Host flags =0x%016llx ", flags);
+	pr_err("DEBUG: =  Host CR0   =0x%016llx, 0x%016llx", exec_vmread(VMX_HOST_CR0), host_cr0);
+	pr_err("DEBUG: =  Host CR3   =0x%016llx, 0x%016llx ", exec_vmread(VMX_HOST_CR3), host_cr3);
+	pr_err("DEBUG: =  Host CR4   =0x%016llx, 0x%016llx ", exec_vmread(VMX_HOST_CR4), host_cr4);
+	pr_err("DEBUG: =  Host RSP   =0x%016llx, 0x%016llx ", exec_vmread(VMX_HOST_RSP), host_rsp);
+	pr_err("DEBUG: =  Host RIP   =0x%016llx", exec_vmread(VMX_HOST_RIP));
+	pr_err("DEBUG: =  Host CS sel %04llx, %04llx ", exec_vmread(VMX_HOST_CS_SEL), cs_sel);
+	pr_err("DEBUG: =  Host SS sel %04llx, %04llx ", exec_vmread(VMX_HOST_SS_SEL), ds_sel);
+	pr_err("DEBUG: =  Host DS sel %04llx, %04llx ", exec_vmread(VMX_HOST_DS_SEL), ss_sel);
+	pr_err("DEBUG: =  Host ES sel %04llx, %04llx ", exec_vmread(VMX_HOST_ES_SEL), es_sel);
+	pr_err("DEBUG: =  Host FS sel %04llx, %04llx ", exec_vmread(VMX_HOST_FS_SEL), fs_sel);
+	pr_err("DEBUG: =  Host GS sel %04llx, %04llx ", exec_vmread(VMX_HOST_GS_SEL), gs_sel);
+	pr_err("DEBUG: =  Host TR sel %04llx ", exec_vmread(VMX_HOST_TR_SEL));
+
+	pr_err("DEBUG: =  Host GDTR Base %016llx ", exec_vmread(VMX_HOST_GDTR_BASE));
+	pr_err("DEBUG: =  Host IDTR Base %016llx ", exec_vmread(VMX_HOST_IDTR_BASE));
+	pr_err("DEBUG: =  Host TR Base %016llx ", exec_vmread(VMX_HOST_TR_BASE));
+	pr_err("DEBUG: =  Host GS Base %016llx ", exec_vmread(VMX_HOST_GS_BASE));
+	pr_err("DEBUG: =  Host FS Base %016llx ", exec_vmread(VMX_HOST_FS_BASE));
+	pr_err("DEBUG: =  Host SYSENTER   CS=%08x, ESP=0x%016llx , EIP=0x%016llx",
+		exec_vmread32(VMX_HOST_IA32_SYSENTER_CS),
+		exec_vmread(VMX_HOST_IA32_SYSENTER_ESP),
+		exec_vmread(VMX_HOST_IA32_SYSENTER_EIP));
+
+	pr_err("DEBUG: host PAT:  %016llx, %016llx", msr_read(MSR_IA32_PAT), exec_vmread(VMX_HOST_IA32_PAT_FULL));
+	pr_err("DEBUG: host EFER: %016llx, %016llx", msr_read(MSR_IA32_EFER), exec_vmread(VMX_HOST_IA32_EFER_FULL));
+
+	pr_err("DEBUG: host VMX_EXIT_CTLS: %016llx, %016llx", msr_read(MSR_IA32_VMX_EXIT_CTLS), exec_vmread(VMX_EXIT_CONTROLS));
+	pr_err("DEBUG: host PERF_GLOBAL_CTRL: %016llx", msr_read(MSR_IA32_PERF_GLOBAL_CTRL));
+}
+
 /* for debug purpose */
 void debug_dump_guest_cpu_regs(struct acrn_vcpu *vcpu)
 {
-	uint64_t flags;
-
-	asm volatile("pushfq; popq %0" :"=m"(flags));
 	uint32_t instruction_err = 0;
 	instruction_err = exec_vmread32(VMX_INSTR_ERROR);
 	pr_info("DEBUG: =  PCPU ID %d ==== VCPU ID %d====", vcpu->pcpu_id, vcpu->vcpu_id);
 	pr_info("DEBUG: vmexit fail err_inst=%x, exit_reason=%lx", instruction_err, vcpu->arch.exit_reason);
 
 	if (instruction_err) {
-		pr_err("DEBUG: =  Host flags =0x%016llx ", flags);
-		pr_err("DEBUG: =  Host CR0   =0x%016llx ", exec_vmread(VMX_HOST_CR0));
-		pr_err("DEBUG: =  Host CR3   =0x%016llx ", exec_vmread(VMX_HOST_CR3));
-		pr_err("DEBUG: =  Host CR4   =0x%016llx ", exec_vmread(VMX_HOST_CR4));
-		pr_err("DEBUG: =  Host RSP   =0x%016llx ", exec_vmread(VMX_HOST_RSP));
-		pr_err("DEBUG: =  Host RIP   =0x%016llx ", exec_vmread(VMX_HOST_RIP));
-		pr_err("DEBUG: =  Host CS sel %04llx ", exec_vmread(VMX_HOST_CS_SEL));
-		pr_err("DEBUG: =  Host SS sel %04llx ", exec_vmread(VMX_HOST_SS_SEL));
-		pr_err("DEBUG: =  Host DS sel %04llx ", exec_vmread(VMX_HOST_DS_SEL));
-		pr_err("DEBUG: =  Host ES sel %04llx ", exec_vmread(VMX_HOST_ES_SEL));
-		pr_err("DEBUG: =  Host FS sel %04llx ", exec_vmread(VMX_HOST_FS_SEL));
-		pr_err("DEBUG: =  Host GS sel %04llx ", exec_vmread(VMX_HOST_GS_SEL));
-		pr_err("DEBUG: =  Host TR sel %04llx ", exec_vmread(VMX_HOST_TR_SEL));
-
-		pr_err("DEBUG: =  Host GDTR Base %016llx ", exec_vmread(VMX_HOST_GDTR_BASE));
-		pr_err("DEBUG: =  Host IDTR Base %016llx ", exec_vmread(VMX_HOST_IDTR_BASE));
-		pr_err("DEBUG: =  Host TR Base %016llx ", exec_vmread(VMX_HOST_TR_BASE));
-		pr_err("DEBUG: =  Host GS Base %016llx ", exec_vmread(VMX_HOST_GS_BASE));
-		pr_err("DEBUG: =  Host FS Base %016llx ", exec_vmread(VMX_HOST_FS_BASE));
-		pr_err("DEBUG: =  Host SYSENTER   CS=%08x, ESP=0x%016llx , EIP=0x%016llx",
-			exec_vmread32(VMX_HOST_IA32_SYSENTER_CS),
-			exec_vmread(VMX_HOST_IA32_SYSENTER_ESP),
-			exec_vmread(VMX_HOST_IA32_SYSENTER_EIP));
-
-		pr_err("DEBUG: host PAT:  %016llx, %016llx", msr_read(MSR_IA32_PAT), exec_vmread(VMX_HOST_IA32_PAT_FULL));
-		pr_err("DEBUG: host EFER: %016llx, %016llx", msr_read(MSR_IA32_EFER), exec_vmread(VMX_HOST_IA32_EFER_FULL));
-
-		pr_err("DEBUG: host VMX_EXIT_CTLS: %016llx, %016llx", msr_read(MSR_IA32_VMX_EXIT_CTLS), exec_vmread(VMX_EXIT_CONTROLS));
-		pr_err("DEBUG: host PERF_GLOBAL_CTRL: %016llx", msr_read(MSR_IA32_PERF_GLOBAL_CTRL));
+		debug_dump_host_state();
 	}
-
-
 
 	pr_err("DEBUG: =  RIP   =0x%016llx  , 0x%016llx", exec_vmread(VMX_GUEST_RIP), vcpu_get_rip(vcpu));
 	pr_err("DEBUG: =  RFLAGS=0x%016llx  , 0x%016llx", exec_vmread(VMX_GUEST_RFLAGS), vcpu_get_rflags(vcpu));
