@@ -32,7 +32,8 @@ static const uint32_t emulated_guest_msrs[NUM_GUEST_MSRS] = {
 	MSR_IA32_BIOS_SIGN_ID,
 	MSR_IA32_TIME_STAMP_COUNTER,
 	MSR_IA32_APIC_BASE,
-	MSR_IA32_PERF_CTL
+	MSR_IA32_PERF_CTL,
+	MSR_IA32_MISC_ENABLE
 };
 
 #define NUM_MTRR_MSRS	13U
@@ -407,6 +408,11 @@ int32_t rdmsr_vmexit_handler(struct acrn_vcpu *vcpu)
 		err = vlapic_rdmsr(vcpu, msr, &v);
 		break;
 	}
+	case MSR_IA32_MISC_ENABLE:
+	{
+		v = vcpu_get_guest_msr(vcpu, msr);
+		break;
+	}
 	default:
 	{
 		if (is_x2apic_msr(msr)) {
@@ -551,6 +557,13 @@ int32_t wrmsr_vmexit_handler(struct acrn_vcpu *vcpu)
 	case MSR_IA32_APIC_BASE:
 	{
 		err = vlapic_wrmsr(vcpu, msr, v);
+		break;
+	}
+	case MSR_IA32_MISC_ENABLE:
+	{
+		vcpu_set_guest_msr(vcpu, msr, v);
+		if (v & MISC_ENABLE_MONITOR_ENA)
+			msr_write(msr, msr_read(msr) | MISC_ENABLE_MONITOR_ENA);
 		break;
 	}
 	default:
