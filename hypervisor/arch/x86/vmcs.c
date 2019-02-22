@@ -346,7 +346,7 @@ void vmx_write_cr4(struct acrn_vcpu *vcpu, uint64_t cr4)
 		vcpu_inject_gp(vcpu, 0U);
 	} else {
 		if (((cr4 ^ old_cr4) & (CR4_PGE | CR4_PSE | CR4_PAE | CR4_SMEP | CR4_SMAP | CR4_PKE)) != 0UL) {
-			if (((cr4 & CR4_PAE) != 0UL) && (is_paging_enabled(vcpu)) && (is_long_mode(vcpu))) {
+			if (((cr4 & CR4_PAE) != 0UL) && (is_paging_enabled(vcpu)) && (!is_long_mode(vcpu))) {
 				load_pdptrs(vcpu);
 			}
 
