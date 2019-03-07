@@ -17,6 +17,14 @@ static void kick_notification(__unused uint32_t irq, __unused void *data)
 	 * And it also serves for smp call.
 	 */
 	uint16_t pcpu_id = get_cpu_id();
+	volatile uint64_t debug_count = 0;
+
+	while (debug_count < 500000UL) {
+		if (smp_call_mask != 0) {
+			break;
+		}
+		debug_count++;
+	}
 
 	if (bitmap_test(pcpu_id, &smp_call_mask)) {
 		struct smp_call_info_data *smp_call =

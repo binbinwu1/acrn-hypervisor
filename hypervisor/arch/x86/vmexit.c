@@ -16,6 +16,7 @@ static int32_t unhandled_vmexit_handler(struct acrn_vcpu *vcpu);
 static int32_t xsetbv_vmexit_handler(struct acrn_vcpu *vcpu);
 static int32_t wbinvd_vmexit_handler(struct acrn_vcpu *vcpu);
 static int32_t undefined_vmexit_handler(struct acrn_vcpu *vcpu);
+static int32_t dr_access_vmexit_handler(struct acrn_vcpu *vcpu);
 
 /* VM Dispatch table for Exit condition handling */
 static const struct vm_exit_dispatch dispatch_table[NR_VMX_EXIT_REASONS] = {
@@ -79,7 +80,8 @@ static const struct vm_exit_dispatch dispatch_table[NR_VMX_EXIT_REASONS] = {
 		.handler = cr_access_vmexit_handler,
 		.need_exit_qualification = 1},
 	[VMX_EXIT_REASON_DR_ACCESS] = {
-		.handler = unhandled_vmexit_handler},
+		.handler = dr_access_vmexit_handler,
+		.need_exit_qualification = 1},
 	[VMX_EXIT_REASON_IO_INSTRUCTION] = {
 		.handler = pio_instr_vmexit_handler,
 		.need_exit_qualification = 1},
@@ -175,12 +177,7 @@ void debug_dump_host_state(void)
 	CPU_SEG_READ(es, &es_sel);
 	CPU_SEG_READ(fs, &fs_sel);
 	CPU_SEG_READ(gs, &gs_sel);
-	// asm volatile("mov %%cs, %0" : "=r" (cs_sel));
-	// asm volatile("mov %%ds, %0" : "=r" (ds_sel));
-	// asm volatile("mov %%ss, %0" : "=r" (ss_sel));
-	// asm volatile("mov %%es, %0" : "=r" (es_sel));
-	// asm volatile("mov %%fs, %0" : "=r" (fs_sel));
-	// asm volatile("mov %%gs, %0" : "=r" (gs_sel));
+
 	pr_err("DEBUG: =  Host flags =0x%016llx ", flags);
 	pr_err("DEBUG: =  Host CR0   =0x%016llx, 0x%016llx", exec_vmread(VMX_HOST_CR0), host_cr0);
 	pr_err("DEBUG: =  Host CR3   =0x%016llx, 0x%016llx ", exec_vmread(VMX_HOST_CR3), host_cr3);
@@ -224,34 +221,33 @@ void debug_dump_guest_cpu_regs(struct acrn_vcpu *vcpu)
 		debug_dump_host_state();
 	}
 
-	pr_err("DEBUG: =  RIP   =0x%016llx  , 0x%016llx", exec_vmread(VMX_GUEST_RIP), vcpu_get_rip(vcpu));
-	pr_err("DEBUG: =  RFLAGS=0x%016llx  , 0x%016llx", exec_vmread(VMX_GUEST_RFLAGS), vcpu_get_rflags(vcpu));
-	pr_err("DEBUG: =  CR0   =0x%016llx  , 0x%016llx", exec_vmread(VMX_GUEST_CR0), vcpu_get_cr0(vcpu));
-	pr_err("DEBUG: =  CR2   =0x%016llx  , ------------------", vcpu_get_cr2(vcpu));
-	pr_err("DEBUG: =  CR3   =0x%016llx  , ------------------", exec_vmread(VMX_GUEST_CR3));
-	pr_err("DEBUG: =  CR4   =0x%016llx  , 0x%016llx", exec_vmread(VMX_GUEST_CR4), vcpu_get_cr4(vcpu));
-	pr_err("DEBUG: =  EFER  =0x%016llx  , 0x%016llx", exec_vmread(VMX_GUEST_IA32_EFER_FULL), vcpu_get_efer(vcpu));
+	pr_err("D: =  RIP   =0x%016llx (L:0x%016llx)  , RFLAGS=0x%016llx", exec_vmread(VMX_GUEST_RIP),
+			exec_vmread(VMX_GUEST_CS_BASE)+ exec_vmread(VMX_GUEST_RIP),
+			exec_vmread(VMX_GUEST_RFLAGS));
+	pr_err("D: =  CR0   =0x%016llx  , CR2   =0x%016llx", exec_vmread(VMX_GUEST_CR0), vcpu_get_cr2(vcpu));
+	pr_err("D: =  CR3   =0x%016llx  , CR4   =0x%016llx", exec_vmread(VMX_GUEST_CR3), exec_vmread(VMX_GUEST_CR4));
+	pr_err("D: =  EFER  =0x%016llx  , DR7   =0x%016llx", exec_vmread(VMX_GUEST_IA32_EFER_FULL), exec_vmread64(VMX_GUEST_DR7));
 
-	pr_err("DEBUG: =  CS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_CS_SEL), exec_vmread(VMX_GUEST_CS_ATTR), exec_vmread(VMX_GUEST_CS_LIMIT), exec_vmread(VMX_GUEST_CS_BASE));
-	pr_err("DEBUG: =  SS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_SS_SEL), exec_vmread(VMX_GUEST_SS_ATTR), exec_vmread(VMX_GUEST_SS_LIMIT), exec_vmread(VMX_GUEST_SS_BASE));
-	pr_err("DEBUG: =  DS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_DS_SEL), exec_vmread(VMX_GUEST_DS_ATTR), exec_vmread(VMX_GUEST_DS_LIMIT), exec_vmread(VMX_GUEST_DS_BASE));
-	pr_err("DEBUG: =  ES sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_ES_SEL), exec_vmread(VMX_GUEST_ES_ATTR), exec_vmread(VMX_GUEST_ES_LIMIT), exec_vmread(VMX_GUEST_ES_BASE));
-	pr_err("DEBUG: =  FS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_FS_SEL), exec_vmread(VMX_GUEST_FS_ATTR), exec_vmread(VMX_GUEST_FS_LIMIT), exec_vmread(VMX_GUEST_FS_BASE));
-	pr_err("DEBUG: =  GS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_GS_SEL), exec_vmread(VMX_GUEST_GS_ATTR), exec_vmread(VMX_GUEST_GS_LIMIT), exec_vmread(VMX_GUEST_GS_BASE));
+	pr_err("D: =  CS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_CS_SEL), exec_vmread(VMX_GUEST_CS_ATTR), exec_vmread(VMX_GUEST_CS_LIMIT), exec_vmread(VMX_GUEST_CS_BASE));
+	pr_err("D: =  SS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_SS_SEL), exec_vmread(VMX_GUEST_SS_ATTR), exec_vmread(VMX_GUEST_SS_LIMIT), exec_vmread(VMX_GUEST_SS_BASE));
+	pr_err("D: =  DS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_DS_SEL), exec_vmread(VMX_GUEST_DS_ATTR), exec_vmread(VMX_GUEST_DS_LIMIT), exec_vmread(VMX_GUEST_DS_BASE));
+	pr_err("D: =  ES sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_ES_SEL), exec_vmread(VMX_GUEST_ES_ATTR), exec_vmread(VMX_GUEST_ES_LIMIT), exec_vmread(VMX_GUEST_ES_BASE));
+	pr_err("D: =  FS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_FS_SEL), exec_vmread(VMX_GUEST_FS_ATTR), exec_vmread(VMX_GUEST_FS_LIMIT), exec_vmread(VMX_GUEST_FS_BASE));
+	pr_err("D: =  GS sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_GS_SEL), exec_vmread(VMX_GUEST_GS_ATTR), exec_vmread(VMX_GUEST_GS_LIMIT), exec_vmread(VMX_GUEST_GS_BASE));
 
-	pr_err("DEBUG: =  GDTR sel ---- attr -------- limit %08llx base %016llx", exec_vmread(VMX_GUEST_GDTR_LIMIT), exec_vmread(VMX_GUEST_GDTR_BASE));
-	pr_err("DEBUG: =  LDTR sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_LDTR_SEL), exec_vmread(VMX_GUEST_LDTR_ATTR), exec_vmread(VMX_GUEST_LDTR_LIMIT), exec_vmread(VMX_GUEST_LDTR_BASE));
-	pr_err("DEBUG: =  IDTR sel ---- attr -------- limit %08llx base %016llx", exec_vmread(VMX_GUEST_IDTR_LIMIT), exec_vmread(VMX_GUEST_IDTR_BASE));
-	pr_err("DEBUG: =  TR   sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_TR_SEL), exec_vmread(VMX_GUEST_TR_ATTR), exec_vmread(VMX_GUEST_TR_LIMIT), exec_vmread(VMX_GUEST_TR_BASE));
+	pr_err("D: =  GDTR sel ---- attr -------- limit %08llx base %016llx", exec_vmread(VMX_GUEST_GDTR_LIMIT), exec_vmread(VMX_GUEST_GDTR_BASE));
+	pr_err("D: =  LDTR sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_LDTR_SEL), exec_vmread(VMX_GUEST_LDTR_ATTR), exec_vmread(VMX_GUEST_LDTR_LIMIT), exec_vmread(VMX_GUEST_LDTR_BASE));
+	pr_err("D: =  IDTR sel ---- attr -------- limit %08llx base %016llx", exec_vmread(VMX_GUEST_IDTR_LIMIT), exec_vmread(VMX_GUEST_IDTR_BASE));
+	pr_err("D: =  TR   sel %04llx attr %08llx limit %08llx base %016llx", exec_vmread(VMX_GUEST_TR_SEL), exec_vmread(VMX_GUEST_TR_ATTR), exec_vmread(VMX_GUEST_TR_LIMIT), exec_vmread(VMX_GUEST_TR_BASE));
 
-	pr_err("DEBUG: =  RAX=0x%016llx    RCX=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RAX), vcpu_get_gpreg(vcpu, CPU_REG_RCX));
-	pr_err("DEBUG: =  RDX=0x%016llx    RBX=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RDX), vcpu_get_gpreg(vcpu, CPU_REG_RBX));
-	pr_err("DEBUG: =  RSP=0x%016llx  , RBP=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RSP), vcpu_get_gpreg(vcpu, CPU_REG_RBP));
-	pr_err("DEBUG: =  RSI=0x%016llx  , RDI=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RSI), vcpu_get_gpreg(vcpu, CPU_REG_RDI));
-	pr_err("DEBUG: =  R8 =0x%016llx  , R9 =0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R8), vcpu_get_gpreg(vcpu, CPU_REG_R9));
-	pr_err("DEBUG: =  R10=0x%016llx  , R11=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R10), vcpu_get_gpreg(vcpu, CPU_REG_R11));
-	pr_err("DEBUG: =  R12=0x%016llx  , R13=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R12), vcpu_get_gpreg(vcpu, CPU_REG_R13));
-	pr_err("DEBUG: =  R14=0x%016llx  , R15=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R14), vcpu_get_gpreg(vcpu, CPU_REG_R15));
+	pr_err("D: =  RAX=0x%016llx    RCX=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RAX), vcpu_get_gpreg(vcpu, CPU_REG_RCX));
+	pr_err("D: =  RDX=0x%016llx    RBX=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RDX), vcpu_get_gpreg(vcpu, CPU_REG_RBX));
+	pr_err("D: =  RSP=0x%016llx  , RBP=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RSP), vcpu_get_gpreg(vcpu, CPU_REG_RBP));
+	pr_err("D: =  RSI=0x%016llx  , RDI=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_RSI), vcpu_get_gpreg(vcpu, CPU_REG_RDI));
+	pr_err("D: =  R8 =0x%016llx  , R9 =0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R8), vcpu_get_gpreg(vcpu, CPU_REG_R9));
+	pr_err("D: =  R10=0x%016llx  , R11=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R10), vcpu_get_gpreg(vcpu, CPU_REG_R11));
+	pr_err("D: =  R12=0x%016llx  , R13=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R12), vcpu_get_gpreg(vcpu, CPU_REG_R13));
+	pr_err("D: =  R14=0x%016llx  , R15=0x%016llx", vcpu_get_gpreg(vcpu, CPU_REG_R14), vcpu_get_gpreg(vcpu, CPU_REG_R15));
 
 }
 
@@ -483,5 +479,94 @@ static int32_t wbinvd_vmexit_handler(struct acrn_vcpu *vcpu)
 static int32_t undefined_vmexit_handler(struct acrn_vcpu *vcpu)
 {
 	vcpu_inject_ud(vcpu);
+	return 0;
+}
+
+// static int32_t mwait_vmexit_handler(struct acrn_vcpu *vcpu)
+// {
+// 	if ((vcpu_get_guest_msr(vcpu, MSR_IA32_MISC_ENABLE) & MISC_ENABLE_MONITOR_ENA) == 0U) {
+// 		pr_err("error: %s, inject a #UD", __func__);
+// 		vcpu_inject_ud(vcpu);
+// 	}
+// 	return 0;
+// }
+
+
+#define DR7_G0_MASK		(1UL << 1U)
+#define DR7_DR0_ALL_MASK	0x000f0003UL
+static int32_t dr_access_vmexit_handler(struct  acrn_vcpu *vcpu)
+{
+	uint64_t reg = 0;
+	uint32_t idx;
+	uint64_t exit_qual;
+	uint32_t gp_idx;
+
+
+	exit_qual = vcpu->arch.exit_qualification;
+	idx = exit_qual & 0x7UL;
+
+	gp_idx = (exit_qual >> 8U) & 0xFU;
+
+	if (exit_qual & 0x10UL) { //Move to DR
+		reg = vcpu_get_gpreg(vcpu, gp_idx);
+
+		pr_err("%s: write value 0x%llx to DR%d", __func__, reg, idx);
+		switch (idx) {
+		case 0U:
+			pr_err("%s: DR0 is used by hv, ignore", __func__);
+			break;
+		case 1U:
+			asm volatile("mov %0, %%dr1": :"r"(reg):);
+			break;
+		case 2U:
+			asm volatile("mov %0, %%dr2": :"r"(reg):);
+			break;
+		case 3U:
+			asm volatile("mov %0, %%dr3": :"r"(reg):);
+			break;
+		case 6U:
+			asm volatile("mov %0, %%dr6": :"r"(reg):);
+			break;
+		case 7U:
+			if ((reg & 0x000f0003UL) != DR7_G0_MASK) {
+				pr_err("%s: DR0 is used by hv, ignore", __func__);
+				return 0;
+			}
+			exec_vmwrite(VMX_GUEST_DR7, reg);
+			break;
+		default:
+			pr_err("%s: unhandled write to DR%d", __func__, idx);
+			break;
+
+		}
+
+	} else { //Move from DR
+		switch (idx) {
+		case 0U:
+			asm volatile("mov %%dr0, %0":"=r"(reg) ::);
+			break;
+		case 1U:
+			asm volatile("mov %%dr1, %0":"=r"(reg) ::);
+			break;
+		case 2U:
+			asm volatile("mov %%dr2, %0":"=r"(reg) ::);
+			break;
+		case 3U:
+			asm volatile("mov %%dr3, %0":"=r"(reg) ::);
+			break;
+		case 6U:
+			asm volatile("mov %%dr6, %0":"=r"(reg) ::);
+			break;
+		case 7U:
+			reg = exec_vmread(VMX_GUEST_DR7);
+			break;
+		default:
+			pr_err("%s: unhandled read from DR%d", __func__, idx);
+			break;
+		}
+
+		vcpu_set_gpreg(vcpu, gp_idx, reg);
+	}
+
 	return 0;
 }

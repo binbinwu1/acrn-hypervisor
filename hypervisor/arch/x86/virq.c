@@ -634,10 +634,23 @@ int32_t exception_vmexit_handler(struct acrn_vcpu *vcpu)
 		}
 	}
 
-	/* Handle all other exceptions */
-	vcpu_retain_rip(vcpu);
+	if (!is_vm0(vcpu->vm))
+		pr_err("exception_vector = 0x%x", exception_vector);
 
-	status = vcpu_queue_exception(vcpu, exception_vector, int_err_code);
+	if (exception_vector != IDT_DB) {
+
+		/* Handle all other exceptions */
+		vcpu_retain_rip(vcpu);
+
+		status = vcpu_queue_exception(vcpu, exception_vector, int_err_code);
+	} else {
+		vcpu->dbg_req_state = VCPU_PAUSED;
+		while (vcpu->dbg_req_state == VCPU_PAUSED) {
+			;
+		}
+		vcpu_set_rflags(vcpu, vcpu_get_rflags(vcpu) | HV_ARCH_VCPU_RFLAGS_RF);
+		pr_err("update rflags to 0x%llx", vcpu_get_rflags(vcpu));
+	}
 
 	if (exception_vector == IDT_MC) {
 		/* just print error message for #MC, it then will be injected

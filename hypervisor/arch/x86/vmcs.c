@@ -409,7 +409,19 @@ static void init_guest_vmx(struct acrn_vcpu *vcpu, uint64_t cr0, uint64_t cr3,
 	vcpu_set_guest_msr(vcpu, MSR_IA32_PAT, PAT_POWER_ON_VALUE);
 	exec_vmwrite(VMX_GUEST_IA32_PAT_FULL, PAT_POWER_ON_VALUE);
 	exec_vmwrite(VMX_GUEST_DR7, DR7_INIT_VALUE);
+
+	/* break UOS at reset vector */
+	if (!is_vm0(vcpu->vm)){
+		uint32_t ip = 0xFFFFFFF0U;
+		asm volatile("mov %0, %%dr0":
+					   :"r"(ip)
+					   :);
+		exec_vmwrite(VMX_GUEST_DR7, DR7_INIT_VALUE | (1U << 1U));
+	}
+
 	exec_vmwrite64(VMX_GUEST_IA32_BNDCFGS_FULL, 0U);
+
+	vcpu_set_guest_msr(vcpu, MSR_IA32_MISC_ENABLE, msr_read(MSR_IA32_MISC_ENABLE));
 }
 
 static void init_guest_state(struct acrn_vcpu *vcpu)
@@ -620,6 +632,10 @@ static void init_exec_ctrl(struct acrn_vcpu *vcpu)
 			 VMX_PROCBASED_CTLS_IO_BITMAP | VMX_PROCBASED_CTLS_MSR_BITMAP |
 			 VMX_PROCBASED_CTLS_SECONDARY);
 
+	if (!is_vm0(vcpu->vm))
+		value32 = check_vmx_ctrl(MSR_IA32_VMX_PROCBASED_CTLS,
+			value32 | VMX_PROCBASED_CTLS_MOV_DR);
+
 	/*Disable VM_EXIT for CR3 access*/
 	value32 &= ~(VMX_PROCBASED_CTLS_CR3_LOAD | VMX_PROCBASED_CTLS_CR3_STORE);
 
@@ -707,6 +723,11 @@ static void init_exec_ctrl(struct acrn_vcpu *vcpu)
 	 * enable VM exit on MC only
 	 */
 	value32 = (1U << IDT_MC);
+
+	/* trap #DB exception */
+	if (!is_vm0(vcpu->vm))
+		value32 |= (1U << IDT_DB);
+
 	exec_vmwrite32(VMX_EXCEPTION_BITMAP, value32);
 
 	/* Set up page fault error code mask - second paragraph * pg 2902
@@ -777,7 +798,8 @@ static void init_entry_ctrl(const struct acrn_vcpu *vcpu)
 	 * IA32_PAT and IA32_EFER
 	 */
 	value32 = (VMX_ENTRY_CTLS_LOAD_EFER |
-		   VMX_ENTRY_CTLS_LOAD_PAT);
+		   VMX_ENTRY_CTLS_LOAD_PAT |
+		   VMX_ENTRY_CTLS_LOAD_DBG);
 
 	value32 |= VMX_ENTRY_CTLS_LOAD_BNDCFGS;
 
@@ -828,6 +850,10 @@ static void init_exit_ctrl(const struct acrn_vcpu *vcpu)
 			 VMX_EXIT_CTLS_LOAD_PAT | VMX_EXIT_CTLS_LOAD_EFER |
 			 VMX_EXIT_CTLS_SAVE_EFER | VMX_EXIT_CTLS_HOST_ADDR64 |
 			 VMX_EXIT_CTLS_CLEAR_BNDCFGS);
+
+	if (!is_vm0(vcpu->vm))
+		value32 = check_vmx_ctrl(MSR_IA32_VMX_EXIT_CTLS,
+			value32 | VMX_EXIT_CTLS_SAVE_DBG);
 
 	exec_vmwrite32(VMX_EXIT_CONTROLS, value32);
 	pr_dbg("VMX_EXIT_CONTROL: 0x%x ", value32);

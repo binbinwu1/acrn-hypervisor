@@ -411,6 +411,7 @@ int32_t run_vcpu(struct acrn_vcpu *vcpu)
 	int64_t status = 0;
 	int32_t ibrs_type = get_ibrs_type();
 
+
 	if (bitmap_test_and_clear_lock(CPU_REG_RIP, &vcpu->reg_updated))
 		exec_vmwrite(VMX_GUEST_RIP, ctx->rip);
 	if (bitmap_test_and_clear_lock(CPU_REG_RSP, &vcpu->reg_updated))
@@ -562,6 +563,7 @@ void reset_vcpu(struct acrn_vcpu *vcpu)
 	vlapic_reset(vlapic);
 
 	reset_vcpu_regs(vcpu);
+	vcpu->dbg_req_state = VCPU_RUNNING;
 }
 
 void pause_vcpu(struct acrn_vcpu *vcpu, enum vcpu_state new_state)
