@@ -12,10 +12,18 @@
 
 struct rit_agent {
 	struct inout_port io_ctl;
+	struct inout_port io_0x83;
 };
 
 static struct rit_agent ra_inst;
 static char* dirname;
+
+static int rit_io_0x83_handler(struct vmctx *ctx, int vcpu, int in, int port,
+		  int bytes, uint32_t *eax, void *arg)
+{
+	printf("RIT_IO: vcpu=%d, in=%d, port=0x%x, bytes=%d, eax=0x%x\r\n", vcpu, in, port, bytes, *eax);
+	return 0;
+}
 
 static int rit_io_ctl_handler(struct vmctx *ctx, int vcpu, int in, int port,
 		  int bytes, uint32_t *eax, void *arg)
@@ -85,7 +93,7 @@ static int rit_io_ctl_handler(struct vmctx *ctx, int vcpu, int in, int port,
 
 	fclose(fp_cfg);
 	fp_cfg = NULL;
-	free(dirname);
+//	free(dirname);
 
 	return 0;
 ERROR:
@@ -103,6 +111,8 @@ int rit_agent_init(struct vmctx *ctx, const char* dir)
 {
 	struct inout_port *io;
 
+	dirname = strdup(dir);
+
 	io = &ra_inst.io_ctl;
 	io->name = "rit_io_ctl";
 	io->port = 0xf8;
@@ -111,7 +121,13 @@ int rit_agent_init(struct vmctx *ctx, const char* dir)
 	io->handler = rit_io_ctl_handler;
 	assert(register_inout(io) == 0);
 
-	dirname = strdup(dir);
+	io = &ra_inst.io_0x83;
+	io->name = "rit_io_x83";
+	io->port = 0x83;
+	io->size = 1;
+	io->flags = IOPORT_F_INOUT;
+	io->handler = rit_io_0x83_handler;
+	assert(register_inout(io) == 0);
 
 	return 0;
 }

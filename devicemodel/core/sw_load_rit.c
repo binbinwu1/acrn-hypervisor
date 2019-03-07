@@ -169,6 +169,10 @@ static int load_seed(struct vmctx *ctx, char* path)
 			}
 		} else if (is_memory_region(ctx, address)) {
 			if ((id == OBJ_MEM_64) || (id == OBJ_MEM_32)) {
+				if(!((address > 0xF202F) || ((address + length) <= 0xF2028))){
+					printf("SW_LOAD: rit is using bios region, check the seed please!\r\n");
+					goto ERROR;
+				}
 				if (fread(target_addr, 1, length, fp) != length){
 					printf("SW_LOAD: failed to load memory object!\r\n");
 					goto ERROR;
