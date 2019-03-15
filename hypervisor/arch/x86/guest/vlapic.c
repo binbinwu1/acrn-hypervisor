@@ -1773,10 +1773,16 @@ int32_t vlapic_set_apicbase(struct acrn_vlapic *vlapic, uint64_t new)
 			switch_apicv_mode_x2apic(vlapic->vcpu);
 			ret = 0;
 	} else if (vlapic->msr_apicbase != new) {
-		dev_dbg(ACRN_DBG_LAPIC,
-			"NOT support to change APIC_BASE MSR from %#lx to %#lx",
-			vlapic->msr_apicbase, new);
-		ret = -1;
+		if ((vlapic->msr_apicbase ^ new) != APICBASE_ENABLED) {
+			pr_err("NOT support to change APIC_BASE MSR from %#lx to %#lx", vlapic->msr_apicbase, new);
+			ret = -1;
+		} else {
+			vlapic->msr_apicbase = new;
+			if (!is_sos_vm(vlapic->vm)) {
+				pr_err("%s: 0x%llx", __func__, new);
+			}
+			ret = 0;
+		}
 	} else {
 		/* No other state currently, do nothing */
 	}
