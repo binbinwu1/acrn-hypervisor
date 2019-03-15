@@ -1792,11 +1792,18 @@ int32_t vlapic_set_apicbase(struct acrn_vlapic *vlapic, uint64_t new)
 				 * Fig. 10-27
 				 */
 			}
-		}
-
-		/*
-		 * TODO: Logic to check for change in Bits 35:12 and Bit 7 and emulate
-		 */
+		} else {
+            if ((vlapic->msr_apicbase ^ new) != APICBASE_ENABLED) {
+                pr_err("NOT support to change APIC_BASE MSR from %#lx to %#lx", vlapic->msr_apicbase, new);
+                ret = -1;
+            } else {
+                vlapic->msr_apicbase = new;
+                if (!is_sos_vm(vlapic->vm)) {
+                    pr_err("%s: 0x%llx", __func__, new);
+                }
+                ret = 0;
+            }
+        }
 	}
 
 	return ret;
