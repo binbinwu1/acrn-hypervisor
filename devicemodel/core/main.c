@@ -91,6 +91,7 @@ bool stdio_in_use;
 bool lapic_pt;
 bool is_rtvm;
 bool skip_pci_mem64bar_workaround = false;
+bool debug_reg_enable = false;
 
 static int virtio_msix = 1;
 static bool debugexit_enabled;
@@ -715,6 +716,7 @@ enum {
 	CMD_OPT_VTPM2,
 	CMD_OPT_LAPIC_PT,
 	CMD_OPT_RTVM,
+	CMD_OPT_DEBUGREG,
 };
 
 static struct option long_options[] = {
@@ -756,6 +758,7 @@ static struct option long_options[] = {
 	{"vtpm2",		required_argument,	0, CMD_OPT_VTPM2},
 	{"lapic_pt",		no_argument,		0, CMD_OPT_LAPIC_PT},
 	{"rtvm",		no_argument,		0, CMD_OPT_RTVM},
+	{"debug_reg",		no_argument,		0, CMD_OPT_DEBUGREG},
 	{0,			0,			0,  0  },
 };
 
@@ -922,6 +925,9 @@ dm_run(int argc, char *argv[])
 				errx(EX_USAGE, "invalid intr-monitor params %s", optarg);
 				exit(1);
 			}
+			break;
+		case CMD_OPT_DEBUGREG:
+			debug_reg_enable = true;
 			break;
 		case 'h':
 			usage(0);
