@@ -502,7 +502,7 @@ running). See :ref:`vcpu-request-interrupt-injection` for details.
        *  scheduling, we need change here to determine it target vcpu is
        *  VMX non-root or root mode
        */
-      if (get_cpu_id() != vcpu->pcpu_id) {
+      if (get_pcpu_id() != vcpu->pcpu_id) {
               send_single_ipi(vcpu->pcpu_id, VECTOR_NOTIFY_VCPU);
       }
    }
