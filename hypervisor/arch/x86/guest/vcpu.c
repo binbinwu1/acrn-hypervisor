@@ -668,6 +668,7 @@ void reset_vcpu(struct acrn_vcpu *vcpu)
 		vlapic_reset(vlapic, apicv_ops);
 
 		reset_vcpu_regs(vcpu);
+		vcpu->dbg_req_state = VCPU_RUNNING;
 	}
 }
 
