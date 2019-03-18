@@ -146,6 +146,8 @@ struct acrn_vm {
 	spinlock_t softirq_dev_lock;
 	struct list_head softirq_dev_entry_list;
 	uint64_t intr_inject_delay_delta; /* delay of intr injection */
+
+	bool enable_debug;
 } __aligned(PAGE_SIZE);
 
 /*
