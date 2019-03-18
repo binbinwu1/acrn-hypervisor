@@ -60,9 +60,9 @@ bool monitor_cap_buggy(void)
 {
 	bool buggy = false;
 
-	if ((boot_cpu_data.family == 0x6U) && (boot_cpu_data.model == 0x5cU)) {
-		buggy = true;
-	}
+	//if ((boot_cpu_data.family == 0x6U) && (boot_cpu_data.model == 0x5cU)) {
+	//	buggy = true;
+	//}
 
 	return buggy;
 }
