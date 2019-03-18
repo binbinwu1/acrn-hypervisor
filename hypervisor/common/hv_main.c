@@ -25,6 +25,7 @@ void vcpu_thread(struct sched_object *obj)
 		/* If vcpu is not launched, we need to do init_vmcs first */
 		if (!vcpu->launched) {
 			init_vmcs(vcpu);
+			vcpu->dbg_req_state = VCPU_RUNNING;
 		}
 
 		if (!is_lapic_pt_enabled(vcpu)) {
