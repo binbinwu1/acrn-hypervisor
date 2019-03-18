@@ -361,6 +361,9 @@ int32_t hcall_set_vcpu_regs(struct acrn_vm *vm, uint16_t vmid, uint64_t param)
 			vcpu = vcpu_from_vid(target_vm, vcpu_regs.vcpu_id);
 			if (vcpu->state != VCPU_OFFLINE) {
 				set_vcpu_regs(vcpu, &(vcpu_regs.vcpu_regs));
+				if (vcpu_regs.debug_flags != 0) {
+					target_vm->enable_debug = true;
+				}
 				ret = 0;
 			}
 		}
@@ -453,7 +456,7 @@ static void inject_msi_lapic_pt(struct acrn_vm *vm, const struct acrn_msi_entry 
 		icr.bits.dest_field = dest;
 		icr.bits.vector = vmsi_data.bits.vector;
 		icr.bits.delivery_mode = vmsi_data.bits.delivery_mode;
-		icr.bits.destination_mode = MSI_ADDR_DESTMODE_LOGICAL; 
+		icr.bits.destination_mode = MSI_ADDR_DESTMODE_LOGICAL;
 
 		msr_write(MSR_IA32_EXT_APIC_ICR, icr.value);
 		dev_dbg(ACRN_DBG_LAPICPT, "%s: icr.value 0x%016llx", __func__, icr.value);
