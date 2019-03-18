@@ -25,6 +25,11 @@ void vcpu_thread(struct thread_object *obj)
 		if (!is_lapic_pt_enabled(vcpu)) {
 			CPU_IRQ_DISABLE();
 		}
+		/* If vcpu is not launched, we need to do init_vmcs first */
+		if (!vcpu->launched) {
+			init_vmcs(vcpu);
+			vcpu->dbg_req_state = VCPU_RUNNING;
+		}
 
 		/* Don't open interrupt window between here and vmentry */
 		if (need_reschedule(pcpuid_from_vcpu(vcpu))) {
