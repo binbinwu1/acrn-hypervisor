@@ -342,9 +342,10 @@ struct acrn_vcpu_regs {
 struct acrn_set_vcpu_regs {
 	/** the virtual CPU ID for the VCPU to set state */
 	uint16_t vcpu_id;
+	uint16_t debug_flags;
 
 	/** reserved space to make cpu_state aligned to 8 bytes */
-	uint16_t reserved0[3];
+	uint16_t reserved0[2];
 
 	/** the structure to hold vcpu state */
 	struct acrn_vcpu_regs vcpu_regs;
