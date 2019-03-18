@@ -259,6 +259,7 @@ struct acrn_vcpu {
 	/* State of this VCPU before suspend */
 	volatile enum vcpu_state prev_state;
 	volatile enum vcpu_state state;	/* State of this VCPU */
+	volatile enum vcpu_state dbg_req_state;
 
 	struct thread_object thread_obj;
 	bool launched; /* Whether the vcpu is launched on target pcpu */
