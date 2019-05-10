@@ -34,6 +34,11 @@ struct acrn_vm_mem_config {
 	uint64_t size;		/* VM memory size configuration */
 };
 
+struct acrn_vm_epc_config {
+	uint64_t base;		/* the start GPA of EPC memory, for non-sos VMs only */
+	uint64_t size;		/* EPC memory size confgiuration, must be page-aligned */
+};
+
 struct target_vuart {
 	uint8_t vm_id;		/* target VM id */
 	uint8_t vuart_id;	/* target vuart index in a VM */
@@ -83,6 +88,7 @@ struct acrn_vm_config {
 							 * We could add more guest flags in future;
 							 */
 	struct acrn_vm_mem_config memory;		/* memory configuration of VM */
+	struct acrn_vm_epc_config epc;
 	uint16_t pci_ptdev_num;				/* indicate how many PCI PT devices in VM */
 	struct acrn_vm_pci_ptdev_config *pci_ptdevs;	/* point to PCI PT devices BDF list */
 	struct acrn_vm_os_config os_config;		/* OS information the VM */
