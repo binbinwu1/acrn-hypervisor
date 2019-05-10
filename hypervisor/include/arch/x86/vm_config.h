@@ -16,6 +16,7 @@
 
 #define PLUG_CPU(n)		(1U << (n))
 #define MAX_VUART_NUM_PER_VM	2U
+#define MAX_EPC_SECTIONS	1U
 
 /*
  * PRE_LAUNCHED_VM is launched by ACRN hypervisor, with LAPIC_PT;
@@ -83,6 +84,7 @@ struct acrn_vm_config {
 							 * We could add more guest flags in future;
 							 */
 	struct acrn_vm_mem_config memory;		/* memory configuration of VM */
+	uint64_t epc_size;				/* epc memory size of VM in byte */
 	uint16_t pci_ptdev_num;				/* indicate how many PCI PT devices in VM */
 	struct acrn_vm_pci_ptdev_config *pci_ptdevs;	/* point to PCI PT devices BDF list */
 	struct acrn_vm_os_config os_config;		/* OS information the VM */

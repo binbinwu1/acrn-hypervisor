@@ -19,6 +19,7 @@
 #include <cpufeatures.h>
 #include <vmexit.h>
 #include <logmsg.h>
+#include <sgx.h>
 
 uint64_t vmx_rdmsr_pat(const struct acrn_vcpu *vcpu)
 {
@@ -362,8 +363,13 @@ static void init_exec_ctrl(struct acrn_vcpu *vcpu)
 
 	value32 |= VMX_PROCBASED_CTLS2_WBINVD;
 
+	value32 |= VMX_PROCBASED_CTLS2_ENCLS;
 	exec_vmwrite32(VMX_PROC_VM_EXEC_CONTROLS2, value32);
 	pr_dbg("VMX_PROC_VM_EXEC_CONTROLS2: 0x%x ", value32);
+
+
+	/* Set up ENCLS vmexit bitmap */
+	exec_vmwrite32(VMX_ENCLS_EXITING_BITMAP_FULL, SGX_ENCLS_EXITING_ECREATE);
 
 	/*APIC-v, config APIC-access address*/
 	value64 = vlapic_apicv_get_apic_access_addr();

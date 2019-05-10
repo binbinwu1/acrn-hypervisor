@@ -12,6 +12,7 @@
 #include <cpuid.h>
 #include <cpufeatures.h>
 #include <vmx.h>
+#include <sgx.h>
 #include <logmsg.h>
 
 static inline const struct vcpuid_entry *local_find_vcpuid_entry(const struct acrn_vcpu *vcpu,
@@ -102,7 +103,7 @@ static inline int32_t set_vcpuid_entry(struct acrn_vm *vm,
 /**
  * initialization of virtual CPUID leaf
  */
-static void init_vcpuid_entry(uint32_t leaf, uint32_t subleaf,
+static void init_vcpuid_entry(struct acrn_vm *vm, uint32_t leaf, uint32_t subleaf,
 			uint32_t flags, struct vcpuid_entry *entry)
 {
 	struct cpuinfo_x86 *cpu_info;
@@ -118,8 +119,13 @@ static void init_vcpuid_entry(uint32_t leaf, uint32_t subleaf,
 			/* mask invpcid */
 			entry->ebx &= ~(CPUID_EBX_INVPCID | CPUID_EBX_PQM | CPUID_EBX_PQE);
 
-			/* mask SGX and SGX_LC */
-			entry->ebx &= ~CPUID_EBX_SGX;
+
+			if (!is_vm_sgx_supported(vm->vm_id)) {
+				/* mask SGX if sgx not supported in vm */
+				entry->ebx &= ~CPUID_EBX_SGX;
+
+			}
+			/* don't support SGX_LC yet, mask SGX_LC */
 			entry->ecx &= ~CPUID_ECX_SGX_LC;
 
 			/* mask MPX */
@@ -201,7 +207,7 @@ int32_t set_vcpuid_entries(struct acrn_vm *vm)
 	uint32_t i, j;
 	struct cpuinfo_x86 *cpu_info = get_pcpu_info();
 
-	init_vcpuid_entry(0U, 0U, 0U, &entry);
+	init_vcpuid_entry(vm, 0U, 0U, 0U, &entry);
 	if (cpu_info->cpuid_level < 0x16U) {
 		/* The cpuid with zero leaf returns the max level. Emulate that the 0x16U is supported */
 		entry.eax = 0x16U;
@@ -220,7 +226,7 @@ int32_t set_vcpuid_entries(struct acrn_vm *vm)
 			switch (i) {
 			case 0x04U:
 				for (j = 0U; ; j++) {
-					init_vcpuid_entry(i, j, CPUID_CHECK_SUBLEAF, &entry);
+					init_vcpuid_entry(vm, i, j, CPUID_CHECK_SUBLEAF, &entry);
 					if (entry.eax == 0U) {
 						break;
 					}
@@ -232,27 +238,56 @@ int32_t set_vcpuid_entries(struct acrn_vm *vm)
 				}
 				break;
 			case 0x07U:
-				init_vcpuid_entry(i, 0U, CPUID_CHECK_SUBLEAF, &entry);
+				init_vcpuid_entry(vm, i, 0U, CPUID_CHECK_SUBLEAF, &entry);
 				if (entry.eax != 0U) {
 					pr_warn("vcpuid: only support subleaf 0 for cpu leaf 07h");
 					entry.eax = 0U;
 				}
 				result = set_vcpuid_entry(vm, &entry);
 				break;
+			case 0x12U:
+				if (is_vm_sgx_supported(vm->vm_id)) {
+					uint32_t epc_sec_id;
+					struct virt_epc_sections* sections = get_vm_epc(vm->vm_id);
 
+					/* init cpuid.12h.0h */
+					init_vcpuid_entry(vm, i, 0U, CPUID_CHECK_SUBLEAF, &entry);
+					result =set_vcpuid_entry(vm, &entry);
+
+					/* init cpuid.12h.1h */
+					if (result == 0) {
+						init_vcpuid_entry(vm, i, 1U, CPUID_CHECK_SUBLEAF, &entry);
+						/* MPX not present to guest */
+						entry.ecx &= ~XCR0_BNDREGS;
+						entry.ecx &= ~XCR0_BNDCSR;
+						result = set_vcpuid_entry(vm, &entry);
+					}
+
+					for (epc_sec_id = 0U; epc_sec_id < sections->count; epc_sec_id++) {
+						entry.leaf = i;
+						entry.subleaf = epc_sec_id + CPUID_SGX_EPC_SUBLEAF_BASE;
+						entry.flags = CPUID_CHECK_SUBLEAF;
+						entry.eax = CPUID_SGX_EPC_TYPE_VALID |
+							    (sections->sections[epc_sec_id].gpa_base & 0xFFFFF000UL);
+
+						entry.ebx = sections->sections[epc_sec_id].gpa_base >> 32U;
+						entry.ecx = sections->sections[epc_sec_id].size & 0xFFFFF000UL;
+						entry.edx = sections->sections[epc_sec_id].size >> 32U;
+						result = set_vcpuid_entry(vm, &entry);
+					}
+				}
+				break;
 			/* These features are disabled */
 			/* PMU is not supported */
 			case 0x0aU:
 			/* Intel RDT */
 			case 0x0fU:
 			case 0x10U:
-			/* Intel SGX */
-			case 0x12U:
 			/* Intel Processor Trace */
 			case 0x14U:
 				break;
 			default:
-				init_vcpuid_entry(i, 0U, 0U, &entry);
+				init_vcpuid_entry(vm, i, 0U, 0U, &entry);
 				result = set_vcpuid_entry(vm, &entry);
 				break;
 			}
@@ -265,15 +300,15 @@ int32_t set_vcpuid_entries(struct acrn_vm *vm)
 		}
 
 		if (result == 0) {
-			init_vcpuid_entry(0x40000000U, 0U, 0U, &entry);
+			init_vcpuid_entry(vm, 0x40000000U, 0U, 0U, &entry);
 			result = set_vcpuid_entry(vm, &entry);
 			if (result == 0) {
-				init_vcpuid_entry(0x40000010U, 0U, 0U, &entry);
+				init_vcpuid_entry(vm, 0x40000010U, 0U, 0U, &entry);
 				result = set_vcpuid_entry(vm, &entry);
 			}
 
 			if (result == 0) {
-				init_vcpuid_entry(0x80000000U, 0U, 0U, &entry);
+				init_vcpuid_entry(vm, 0x80000000U, 0U, 0U, &entry);
 				result = set_vcpuid_entry(vm, &entry);
 			}
 
@@ -281,7 +316,7 @@ int32_t set_vcpuid_entries(struct acrn_vm *vm)
 				limit = entry.eax;
 				vm->vcpuid_xlevel = limit;
 				for (i = 0x80000001U; i <= limit; i++) {
-					init_vcpuid_entry(i, 0U, 0U, &entry);
+					init_vcpuid_entry(vm, i, 0U, 0U, &entry);
 					result = set_vcpuid_entry(vm, &entry);
 					if (result != 0) {
 						break;

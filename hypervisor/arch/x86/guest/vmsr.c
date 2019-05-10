@@ -114,6 +114,7 @@ static const uint32_t unsupported_msrs[NUM_UNSUPPORTED_MSRS] = {
 	MSR_IA32_VMX_TRUE_ENTRY_CTLS,
 	MSR_IA32_VMX_VMFUNC,
 
+#if 0
 	/* SGX disabled: CPUID.12H.EAX[0], CPUID.07H.ECX[30] */
 	MSR_IA32_SGXLEPUBKEYHASH0,
 	MSR_IA32_SGXLEPUBKEYHASH1,
@@ -122,13 +123,17 @@ static const uint32_t unsupported_msrs[NUM_UNSUPPORTED_MSRS] = {
 
 	/* SGX disabled : CPUID.07H.EBX[2] */
 	MSR_IA32_SGX_SVN_STATUS,
+#endif
 
 	/* MPX disabled: CPUID.07H.EBX[14] */
 	MSR_IA32_BNDCFGS,
 
+#if 0
+
 	/* SGX disabled : CPUID.12H.EAX[0] */
 	MSR_SGXOWNEREPOCH0,
 	MSR_SGXOWNEREPOCH1,
+#endif
 
 	/* Performance Counters and Events: CPUID.0AH.EAX[15:8] */
 	MSR_IA32_PMC0,
@@ -391,7 +396,7 @@ int32_t rdmsr_vmexit_handler(struct acrn_vcpu *vcpu)
 	}
 	case MSR_IA32_FEATURE_CONTROL:
 	{
-		v = MSR_IA32_FEATURE_CONTROL_LOCK;
+		v = MSR_IA32_FEATURE_CONTROL_LOCK | MSR_IA32_FEATURE_CONTROL_SGX_GE;
 		break;
 	}
 	case MSR_IA32_MCG_CAP:

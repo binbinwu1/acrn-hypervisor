@@ -100,6 +100,10 @@
 #define CPUID_EAX_XCR0_BNDREGS	(1U<<3U)
 /* CPUID.0DH.EAX.XCR0_BNDCSR */
 #define CPUID_EAX_XCR0_BNDCSR	(1U<<4U)
+/* CPUID.12H.EAX.SGX1 */
+#define	CPUID_EAX_SGX1		(1U<<0U)
+/* CPUID.12H.EAX.SGX2 */
+#define	CPUID_EAX_SGX2		(1U<<1U)
 
 /* CPUID source operands */
 #define CPUID_VENDORSTRING      0U

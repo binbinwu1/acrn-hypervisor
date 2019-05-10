@@ -28,6 +28,7 @@
 #include <cpu_caps.h>
 #include <e820.h>
 #include <vm_config.h>
+#include <epc_manager.h>
 
 #define INVALID_VM_ID 0xffffU
 

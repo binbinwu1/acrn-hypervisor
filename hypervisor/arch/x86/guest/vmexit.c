@@ -17,6 +17,7 @@
 #include <vtd.h>
 #include <vcpuid.h>
 #include <trace.h>
+#include <sgx.h>
 
 /*
  * According to "SDM APPENDIX C VMX BASIC EXIT REASONS",
@@ -155,7 +156,7 @@ static const struct vm_exit_dispatch dispatch_table[NR_VMX_EXIT_REASONS] = {
 	[VMX_EXIT_REASON_VMFUNC] = {
 		.handler = undefined_vmexit_handler},
 	[VMX_EXIT_REASON_ENCLS] = {
-		.handler = unhandled_vmexit_handler},
+		.handler = sgx_encls_vmexit_handler},
 	[VMX_EXIT_REASON_RDSEED] = {
 		.handler = unhandled_vmexit_handler},
 	[VMX_EXIT_REASON_PAGE_MODIFICATION_LOG_FULL] = {

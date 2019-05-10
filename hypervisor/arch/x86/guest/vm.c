@@ -23,6 +23,7 @@
 #include <logmsg.h>
 #include <firmware.h>
 #include <board.h>
+#include <epc_manager.h>
 
 vm_sw_loader_t vm_sw_loader;
 
@@ -281,6 +282,7 @@ static void prepare_sos_vm_memmap(struct acrn_vm *vm)
 	uint64_t attr_uc = (EPT_RWX | EPT_UNCACHED);
 	uint64_t hv_hpa;
 	uint64_t *pml4_page = (uint64_t *)vm->arch_vm.nworld_eptp;
+	struct epc_sections* epc_secs;
 
 	const struct e820_entry *entry;
 	uint32_t entries_count = vm->e820_entry_num;
@@ -306,11 +308,22 @@ static void prepare_sos_vm_memmap(struct acrn_vm *vm)
 		}
 	}
 
+	/* BIOS will reserve the EPC pages in E820 */
+	ept_mr_modify(vm, pml4_page, 0x80200000UL, 0x5d80000UL,  EPT_WB , EPT_MT_MASK);
+
 	pr_dbg("SOS_VM e820 layout:\n");
 	for (i = 0U; i < entries_count; i++) {
 		entry = p_e820 + i;
 		pr_dbg("e820 table: %d type: 0x%x", i, entry->type);
 		pr_dbg("BaseAddress: 0x%016llx length: 0x%016llx\n", entry->baseaddr, entry->length);
+	}
+
+	/* Unmap all platform epc resource.
+	 * If sos enables SGX resource, the part of SOS will be mapped later.
+	 */
+	epc_secs = get_platform_epc();
+	for (i = 0U; i < epc_secs->count; i++) {
+		ept_mr_del(vm, pml4_page, epc_secs->sections[i].base, epc_secs->sections[i].size);
 	}
 
 	/* unmap hypervisor itself for safety
@@ -329,6 +342,8 @@ int32_t create_vm(uint16_t vm_id, struct acrn_vm_config *vm_config, struct acrn_
 	struct acrn_vm *vm = NULL;
 	int32_t status = 0;
 	bool need_cleanup = false;
+	struct virt_epc_sections* vepc_secs;
+	uint32_t i;
 
 	/* Allocate memory for virtual machine */
 	vm = &vm_array[vm_id];
@@ -432,6 +447,16 @@ int32_t create_vm(uint16_t vm_id, struct acrn_vm_config *vm_config, struct acrn_
 			vm->sw.is_completion_polling = true;
 		}
 		status = set_vcpuid_entries(vm);
+
+		if (status == 0) {
+			vepc_secs = get_vm_epc(vm->vm_id);
+			for (i = 0U; i < vepc_secs->count; i++) {
+				ept_mr_add(vm, (uint64_t *)vm->arch_vm.nworld_eptp, vepc_secs->sections[i].hpa_base,
+					vepc_secs->sections[i].gpa_base, vepc_secs->sections[i].size, EPT_RWX | EPT_WB);
+			}
+
+		}
+
 		if (status == 0) {
 			vm->state = VM_CREATED;
 		} else {

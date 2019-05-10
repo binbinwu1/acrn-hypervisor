@@ -34,7 +34,7 @@ static struct mem_pool memory_pool = {
 	.contiguity_bitmap = malloc_heap_contiguity_bitmap
 };
 
-static void *allocate_mem(struct mem_pool *pool, uint32_t num_bytes)
+void *allocate_mem(struct mem_pool *pool, uint32_t num_bytes)
 {
 	void *memory = NULL;
 	uint32_t idx;
@@ -99,6 +99,11 @@ static void *allocate_mem(struct mem_pool *pool, uint32_t num_bytes)
 				 * selected free contiguous buffer in the
 				 * memory pool
 				 */
+
+				if (idx * BITMAP_WORD_SIZE + bit_idx + requested_buffs > pool->total_buffs){
+					break;
+				}
+
 				memory = pool->start_addr + pool->buff_size * (idx * BITMAP_WORD_SIZE + bit_idx);
 
 				/* Update allocation bitmaps information for
@@ -156,7 +161,7 @@ static void *allocate_mem(struct mem_pool *pool, uint32_t num_bytes)
 	return (void *)NULL;
 }
 
-static void deallocate_mem(struct mem_pool *pool, const void *ptr)
+void deallocate_mem(struct mem_pool *pool, const void *ptr)
 {
 	uint32_t *bitmask, *contiguity_bitmask;
 	uint32_t bmp_idx, bit_idx, buff_idx;

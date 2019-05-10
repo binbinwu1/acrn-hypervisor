@@ -21,6 +21,9 @@ struct mem_pool {
 	uint32_t *contiguity_bitmap;	/* Pointer to contiguity bitmap */
 };
 
+void *allocate_mem(struct mem_pool *pool, uint32_t num_bytes);
+void deallocate_mem(struct mem_pool *pool, const void *ptr);
+
 /* APIs exposing memory allocation/deallocation abstractions */
 void *malloc(uint32_t num_bytes);
 void *calloc(uint32_t num_elements, uint32_t element_size);
