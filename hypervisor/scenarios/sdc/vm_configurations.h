@@ -9,6 +9,9 @@
 
 #define CONFIG_MAX_VM_NUM	2U
 
+#define CONFIG_VM0_EPC_SIZE	0x2d80000UL
+#define CONFIG_VM1_EPC_SIZE	0x3000000UL
+
 /* Bits mask of guest flags that can be programmed by device model. Other bits are set by hypervisor only */
 #define DM_OWNED_GUEST_FLAG_MASK	(GUEST_FLAG_SECURE_WORLD_ENABLED | GUEST_FLAG_LAPIC_PASSTHROUGH | \
 						GUEST_FLAG_RT | GUEST_FLAG_IO_COMPLETION_POLLING)
