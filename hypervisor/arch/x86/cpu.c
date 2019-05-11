@@ -26,6 +26,7 @@
 #include <logmsg.h>
 #include <cat.h>
 #include <vboot.h>
+#include <sgx.h>
 
 #define CPU_UP_TIMEOUT		100U /* millisecond */
 #define CPU_DOWN_TIMEOUT	100U /* millisecond */
@@ -226,6 +227,8 @@ void init_pcpu_post(uint16_t pcpu_id)
 		}
 
 		ptdev_init();
+
+		sgx_init();
 
 		/* Start all secondary cores */
 		startup_paddr = prepare_trampoline();
