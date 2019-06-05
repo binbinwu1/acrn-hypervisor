@@ -47,7 +47,10 @@ struct acrn_vm_config vm_configs[CONFIG_MAX_VM_NUM] = {
 		.vuart[1] = {
 			.type = VUART_LEGACY_PIO,
 			.addr.port_base = INVALID_COM_BASE,
+		},
+		.epc = {
+			.base = 0x80000000UL,	/* This range reserved in E820 talbe from DM */
+			.size = 0x5d80000UL,
 		}
-
 	}
 };
