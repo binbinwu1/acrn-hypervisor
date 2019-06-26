@@ -251,7 +251,7 @@ static void add_pte(const uint64_t *pde, uint64_t paddr_start, uint64_t vaddr_st
 		if (mem_ops->pgentry_present(*pte) != 0UL) {
 			ASSERT(false, "invalid op, pte present");
 		} else {
-			set_pgentry(pte, paddr | prot);
+			set_pgentry(pte, paddr | prot | mem_ops->get_ignore_pat_mask());
 			paddr += PTE_SIZE;
 			vaddr += PTE_SIZE;
 
@@ -284,7 +284,7 @@ static void add_pde(const uint64_t *pdpte, uint64_t paddr_start, uint64_t vaddr_
 			if (mem_aligned_check(paddr, PDE_SIZE) &&
 				mem_aligned_check(vaddr, PDE_SIZE) &&
 				(vaddr_next <= vaddr_end)) {
-				set_pgentry(pde, paddr | (prot | PAGE_PSE));
+				set_pgentry(pde, paddr | (prot | PAGE_PSE) | mem_ops->get_ignore_pat_mask());
 				if (vaddr_next < vaddr_end) {
 					paddr += (vaddr_next - vaddr);
 					vaddr = vaddr_next;
@@ -326,7 +326,7 @@ static void add_pdpte(const uint64_t *pml4e, uint64_t paddr_start, uint64_t vadd
 			if (mem_aligned_check(paddr, PDPTE_SIZE) &&
 				mem_aligned_check(vaddr, PDPTE_SIZE) &&
 				(vaddr_next <= vaddr_end)) {
-				set_pgentry(pdpte, paddr | (prot | PAGE_PSE));
+				set_pgentry(pdpte, paddr | (prot | PAGE_PSE) | mem_ops->get_ignore_pat_mask());
 				if (vaddr_next < vaddr_end) {
 					paddr += (vaddr_next - vaddr);
 					vaddr = vaddr_next;

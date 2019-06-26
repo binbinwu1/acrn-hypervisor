@@ -55,6 +55,11 @@ static inline struct page *ppt_get_pd_page(const union pgtable_pages_info *info,
 	return pd_page;
 }
 
+static inline uint64_t ppt_get_ignore_pat_mask(void)
+{
+	return 0UL;
+}
+
 const struct memory_ops ppt_mem_ops = {
 	.info = &ppt_pages_info,
 	.get_default_access_right = ppt_get_default_access_right,
@@ -62,6 +67,7 @@ const struct memory_ops ppt_mem_ops = {
 	.get_pml4_page = ppt_get_pml4_page,
 	.get_pdpt_page = ppt_get_pdpt_page,
 	.get_pd_page = ppt_get_pd_page,
+	.get_ignore_pat_mask = ppt_get_ignore_pat_mask,
 };
 
 static struct page sos_vm_pml4_pages[PML4_PAGE_NUM(EPT_ADDRESS_SPACE(CONFIG_SOS_RAM_SIZE))];
@@ -153,6 +159,11 @@ static inline void *ept_get_sworld_memory_base(const union pgtable_pages_info *i
 	return info->ept.sworld_memory_base;
 }
 
+static inline uint64_t ept_get_ignore_pat_mask(void)
+{
+	return (1UL << 6U);
+}
+
 void init_ept_mem_ops(struct acrn_vm *vm)
 {
 	uint16_t vm_id = vm->vm_id;
@@ -175,5 +186,5 @@ void init_ept_mem_ops(struct acrn_vm *vm)
 	vm->arch_vm.ept_mem_ops.get_pdpt_page = ept_get_pdpt_page;
 	vm->arch_vm.ept_mem_ops.get_pd_page = ept_get_pd_page;
 	vm->arch_vm.ept_mem_ops.get_pt_page = ept_get_pt_page;
-
+	vm->arch_vm.ept_mem_ops.get_ignore_pat_mask = ept_get_ignore_pat_mask;
 }
