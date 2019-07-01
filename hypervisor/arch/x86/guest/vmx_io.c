@@ -95,6 +95,44 @@ int32_t pio_instr_vmexit_handler(struct acrn_vcpu *vcpu)
 	return status;
 }
 
+static void debug_show_ept(struct acrn_vcpu *vcpu, uint64_t *pml4_page, uint64_t gpa)
+{
+	uint64_t *pml4e;
+	uint64_t *pdpte;
+	uint64_t *pde;
+	uint64_t *pte;
+	bool large_page;
+
+	pml4e = pml4e_offset(pml4_page, gpa);
+
+	pr_err("%s: 0x%016llx", __func__, gpa);
+
+	if ((*pml4e & 0x7UL) != 0UL) {
+		pr_err("EPT: pml4e = 0x%016llx", *pml4e);
+		pdpte = pml4e_page_vaddr(*pml4e) + pdpte_index(gpa);
+		if ((*pdpte & 0x7UL) != 0UL) {
+			large_page = (bool)(*pdpte & 0x80UL);
+			pr_err("EPT: pdpte = 0x%016llx, 1GB Page (%u)", *pdpte, large_page);
+			if (large_page)
+				return;
+			pde = pdpte_page_vaddr(*pdpte) + pde_index(gpa);
+			if ((*pde & 0x7UL) != 0UL) {
+				large_page = (bool)(*pde & 0x80UL);
+				pr_err("EPT: pde = 0x%016llx, 2MB Page (%u)", *pde, large_page);
+				if (large_page)
+					return;
+				pte = pde_page_vaddr(*pde) + pte_index(gpa);
+				if ((*pte & 0x7UL) != 0UL) {
+					pr_err("EPT: pte = 0x%016llx, 4KB Page", *pte);
+				}
+			}
+		}
+
+
+	}
+	pr_err("%s done\n", __func__);
+}
+
 int32_t ept_violation_vmexit_handler(struct acrn_vcpu *vcpu)
 {
 	int32_t status = -EINVAL, ret;
