@@ -43,6 +43,14 @@ int32_t vmx_wrmsr_pat(struct acrn_vcpu *vcpu, uint64_t value)
 			ret = -EINVAL;
 			break;
 		}
+
+		/* replace !WC to WB*/
+		if ((field != 0x1UL) && (field != 0x06UL)) {
+			value &= ~(0xffUL << 8U*i);
+			value |= 0x06UL << 8U*i;
+			pr_err("%s: replace %u to WB", __func__, field);
+		}
+
 	}
 
 	if (ret == 0) {

@@ -108,9 +108,9 @@ void ept_add_mr(struct acrn_vm *vm, uint64_t *pml4_page,
 	 * to force snooping of PCIe devices if the page
 	 * is cachable
 	 */
-	if (((prot & EPT_MT_MASK) != EPT_UNCACHED) && iommu_snoop_supported(vm->iommu)) {
-		prot |= EPT_SNOOP_CTRL;
-	}
+	// if (((prot & EPT_MT_MASK) != EPT_UNCACHED) && iommu_snoop_supported(vm->iommu)) {
+	// 	prot |= EPT_SNOOP_CTRL;
+	// }
 
 	mmu_add(pml4_page, hpa, gpa, size, prot, &vm->arch_vm.ept_mem_ops);
 
@@ -129,9 +129,9 @@ void ept_modify_mr(struct acrn_vm *vm, uint64_t *pml4_page,
 
 	dev_dbg(ACRN_DBG_EPT, "%s,vm[%d] gpa 0x%llx size 0x%llx\n", __func__, vm->vm_id, gpa, size);
 
-	if (((local_prot & EPT_MT_MASK) != EPT_UNCACHED) && iommu_snoop_supported(vm->iommu)) {
-		local_prot |= EPT_SNOOP_CTRL;
-	}
+	// if (((local_prot & EPT_MT_MASK) != EPT_UNCACHED) && iommu_snoop_supported(vm->iommu)) {
+	// 	local_prot |= EPT_SNOOP_CTRL;
+	// }
 
 	mmu_modify_or_del(pml4_page, gpa, size, local_prot, prot_clr, &(vm->arch_vm.ept_mem_ops), MR_MODIFY);
 
