@@ -141,6 +141,7 @@ bool sanitize_vm_config(void)
 
 		if ((vm_config->guest_flags & GUEST_FLAG_CLOS_REQUIRED) != 0U) {
 			if (cat_cap_info.support && (vm_config->clos <= cat_cap_info.clos_max)) {
+					pr_err("%s cat_cap_info enabled\n", __func__);
 					cat_cap_info.enabled = true;
 			} else {
 				pr_err("%s set wrong CLOS or CAT is not supported\n", __func__);

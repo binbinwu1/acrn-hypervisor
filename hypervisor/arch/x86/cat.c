@@ -18,7 +18,8 @@
 
 struct cat_hw_info cat_cap_info;
 const uint16_t hv_clos = 0U;
-static uint16_t platform_clos_num = MAX_PLATFORM_CLOS_NUM;
+static uint16_t platform_clos_num;
+static struct platform_clos_info* platform_clos_array;
 
 int32_t init_cat_cap_info(void)
 {
@@ -37,6 +38,8 @@ int32_t init_cat_cap_info(void)
 			cat_cap_info.res_id = CAT_RESID_L2;
 		}
 
+		platform_clos_num = platform_l2_clos_num;
+		platform_clos_array = platform_l2_clos_array;
 		cat_cap_info.support = true;
 
 		/* CPUID.(EAX=0x10,ECX=ResID):EAX[4:0] reports the length of CBM supported
@@ -48,6 +51,40 @@ int32_t init_cat_cap_info(void)
 		cat_cap_info.cbm_len = (uint16_t)((eax & 0x1fU) + 1U);
 		cat_cap_info.bitmask = ebx;
 		cat_cap_info.clos_max = (uint16_t)(edx & 0xffffU);
+
+		if ((platform_clos_num != 0U) && ((cat_cap_info.clos_max + 1U) != platform_clos_num)) {
+			pr_err("%s clos_max:%hu, platform_clos_num:%u\n", __func__, cat_cap_info.clos_max, platform_clos_num);
+			ret = -EINVAL;
+		}
+	} else {
+		uint32_t ways;
+
+		/* get the ways of LLC cache  */
+		cpuid_subleaf(0x4U, 3U, &eax, &ebx, &ecx, &edx);
+		ways = (ebx >> 22U) + 1U;
+
+		if (ways == 16U) {
+			cat_cap_info.cbm_len = 16U;
+			platform_clos_num = platform_l3_way16_clos_num;
+			platform_clos_array = platform_l3_way16_clos_array;
+		} else if (ways == 12U) {
+			cat_cap_info.cbm_len = 12U;
+			platform_clos_num = platform_l3_way12_clos_num;
+			platform_clos_array = platform_l3_way12_clos_array;
+		} else if (ways == 8U) {
+			cat_cap_info.cbm_len = 8U;
+			platform_clos_num = platform_l3_way8_clos_num;
+			platform_clos_array = platform_l3_way8_clos_array;
+		} else {
+			pr_err("%s CAT is not supported\n", __func__);
+			ret = -EINVAL;
+			return ret;
+		}
+		cat_cap_info.res_id = CAT_RESID_L3;
+		cat_cap_info.support = true;
+		cat_cap_info.l3_ext = true;
+		cat_cap_info.bitmask = 0U;
+		cat_cap_info.clos_max = 3U;
 
 		if ((platform_clos_num != 0U) && ((cat_cap_info.clos_max + 1U) != platform_clos_num)) {
 			pr_err("%s clos_max:%hu, platform_clos_num:%u\n", __func__, cat_cap_info.clos_max, platform_clos_num);
@@ -80,8 +117,12 @@ uint64_t clos2prq_msr(uint16_t clos)
 {
 	uint64_t prq_assoc;
 
-	prq_assoc = msr_read(MSR_IA32_PQR_ASSOC);
-	prq_assoc = (prq_assoc & 0xffffffffUL) | ((uint64_t)clos << 32U);
+	if (cat_cap_info.l3_ext) {
+		prq_assoc =  clos;
+	} else {
+		prq_assoc = msr_read(MSR_IA32_PQR_ASSOC);
+		prq_assoc = (prq_assoc & 0xffffffffUL) | ((uint64_t)clos << 32U);
+	}
 
 	return prq_assoc;
 }

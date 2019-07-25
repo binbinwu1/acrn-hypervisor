@@ -11,7 +11,7 @@ else
 endif
 
 RELEASE ?= 1
-SCENARIO ?= sdc
+SCENARIO ?= industrial
 
 O ?= build
 ROOT_OUT := $(shell mkdir -p $(O);cd $(O);pwd)
