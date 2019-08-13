@@ -362,7 +362,7 @@ int32_t set_vcpuid_entries(struct acrn_vm *vm)
 				break;
 			/* These features are disabled */
 			/* PMU is not supported */
-			case 0x0aU:
+			//case 0x0aU:
 			/* Intel RDT */
 			case 0x0fU:
 			case 0x10U:

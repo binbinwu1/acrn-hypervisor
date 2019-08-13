@@ -283,10 +283,12 @@ static void init_exec_ctrl(struct acrn_vcpu *vcpu)
 	 */
 	value32 &= ~VMX_PROCBASED_CTLS_INVLPG;
 
+#if 0
 	/*
 	 * Enable VM_EXIT for rdpmc execution.
 	 */
 	value32 |= VMX_PROCBASED_CTLS_RDPMC;
+#endif
 
 	exec_vmwrite32(VMX_PROC_VM_EXEC_CONTROLS, value32);
 	pr_dbg("VMX_PROC_VM_EXEC_CONTROLS: 0x%x ", value32);
