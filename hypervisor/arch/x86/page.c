@@ -13,6 +13,7 @@
 #include <vm_configurations.h>
 #include <security.h>
 #include <vm.h>
+#include <logmsg.h>
 
 static struct page ppt_pml4_pages[PML4_PAGE_NUM(CONFIG_PLATFORM_RAM_SIZE + PLATFORM_LO_MMIO_SIZE)];
 static struct page ppt_pdpt_pages[PDPT_PAGE_NUM(CONFIG_PLATFORM_RAM_SIZE + PLATFORM_LO_MMIO_SIZE)];
@@ -211,6 +212,7 @@ void init_ept_mem_ops(struct memory_ops *mem_ops, uint16_t vm_id)
 
 	/* Mitigation for issue "Machine Check Error on Page Size Change" */
 	if (is_ept_force_4k_ipage()) {
+		pr_err("vm_id[%u] force 4K instruction page Enabled!", vm_id);
 		mem_ops->tweak_exe_right = ept_tweak_exe_right;
 		mem_ops->recover_exe_right = ept_recover_exe_right;
 		/* For RTVM, build 4KB page mapping in EPT */
@@ -218,6 +220,7 @@ void init_ept_mem_ops(struct memory_ops *mem_ops, uint16_t vm_id)
 			mem_ops->large_page_enabled = false;
 		}
 	} else {
+		pr_err("vm_id[%u] force 4K instruction page Disabled!", vm_id);
 		mem_ops->tweak_exe_right = nop_tweak_exe_right;
 		mem_ops->recover_exe_right = nop_recover_exe_right;
 	}
