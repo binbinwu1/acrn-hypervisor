@@ -50,13 +50,10 @@
 #define PCI_COMMAND_INTX_DISABLE ((uint16_t)0x400)
 #endif
 
-/* Used to temporarily set mmc & mme to support only one vector for MSI,
- * remove it when multiple vectors for MSI is ready.
- */
-#define FORCE_MSI_SINGLE_VECTOR 1
-
 #define MSIX_TABLE_COUNT(ctrl) (((ctrl) & PCIM_MSIXCTRL_TABLE_SIZE) + 1)
 #define MSIX_CAPLEN 12
+
+#define MSI_MMC(ctrl)	(((ctrl) &  PCIM_MSICTRL_MMC_MASK) >> 1)
 
 #define	PCI_BDF_GPU		0x00000010	/* 00:02.0 */
 
@@ -188,19 +185,6 @@ write_config(struct pci_device *phys_dev, long reg, int width, uint32_t data)
 	return temp;
 }
 
-
-#ifdef FORCE_MSI_SINGLE_VECTOR
-/* Temporarily set mmc & mme to 0.
- * Remove it when multiple vectors for MSI ready.
- */
-static inline void
-clear_mmc_mme(uint32_t *val)
-{
-	*val &= ~((uint32_t)PCIM_MSICTRL_MMC_MASK << 16);
-	*val &= ~((uint32_t)PCIM_MSICTRL_MME_MASK << 16);
-}
-#endif
-
 static int
 cfginit_cap(struct vmctx *ctx, struct passthru_dev *ptdev)
 {
@@ -235,31 +219,11 @@ cfginit_cap(struct vmctx *ctx, struct passthru_dev *ptdev)
 				ptdev->msi.msgctrl = read_config(phys_dev,
 					ptr + 2, 2);
 
-#ifdef FORCE_MSI_SINGLE_VECTOR
-				/* Temporarily set mmc & mme to 0,
-				 * which means supporting 1 vector. So that
-				 * guest will not enable more than 1 vector.
-				 * Remove it when multiple vectors ready.
-				 */
-				ptdev->msi.msgctrl &= ~PCIM_MSICTRL_MMC_MASK;
-				ptdev->msi.msgctrl &= ~PCIM_MSICTRL_MME_MASK;
-#endif
-
 				ptdev->msi.emulated = 0;
 				caplen = msi_caplen(ptdev->msi.msgctrl);
 				capptr = ptr;
 				while (caplen > 0) {
 					u32 = read_config(phys_dev, capptr, 4);
-
-#ifdef FORCE_MSI_SINGLE_VECTOR
-					/* Temporarily set mmc & mme to 0.
-					 * which means supporting 1 vector.
-					 * Remove it when multiple vectors ready
-					 */
-					if (capptr == ptdev->msi.capoff)
-						clear_mmc_mme(&u32);
-#endif
-
 					pci_set_cfgdata32(dev, capptr, u32);
 					caplen -= 4;
 					capptr += 4;
@@ -307,7 +271,7 @@ cfginit_cap(struct vmctx *ctx, struct passthru_dev *ptdev)
 		ptirq.virt_bdf = virt_bdf;
 		ptirq.phys_bdf = ptdev->phys_bdf;
 		/* currently, only support one vector for MSI */
-		ptirq.msix.vector_cnt = 1;
+		ptirq.msix.vector_cnt = 1 << MSI_MMC(ptdev->msi.msgctrl);
 		ptirq.msix.table_paddr = 0;
 		ptirq.msix.table_size = 0;
 		vm_set_ptdev_msix_info(ctx, &ptirq);
@@ -916,8 +880,7 @@ passthru_deinit(struct vmctx *ctx, struct pci_vdev *dev, char *opts)
 	if (ptdev->msix.capoff != 0)
 		deinit_msix_table(ctx, ptdev);
 	else if(ptdev->msi.capoff != 0) {
-		/* Currently only support 1 vector */
-		vm_reset_ptdev_msix_info(ctx, virt_bdf, ptdev->phys_bdf, 1);
+		vm_reset_ptdev_msix_info(ctx, virt_bdf, ptdev->phys_bdf, 1 << MSI_MMC(ptdev->msi.msgctrl));
 	}
 
 	pr_info("vm_reset_ptdev_intx:0x%x-%x, ioapic virpin=%d.\n",
