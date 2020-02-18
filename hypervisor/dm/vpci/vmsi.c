@@ -27,10 +27,13 @@
  * $FreeBSD$
  */
 
+#include <errno.h>
 #include <vm.h>
 #include <ptdev.h>
 #include <assign.h>
 #include <vpci.h>
+#include <vtd.h>
+#include <logmsg.h>
 #include "vpci_priv.h"
 
 
@@ -51,6 +54,32 @@ static inline void enable_disable_msi(const struct pci_vdev *vdev, bool enable)
 	}
 	pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_CTRL, 2U, msgctrl);
 }
+
+static inline uint16_t get_mmc(uint16_t msgctrl)
+{
+	return (1U << ((msgctrl & PCIM_MSICTRL_MMC_MASK) >> 1U));
+}
+
+static inline uint16_t get_mme(uint16_t msgctrl)
+{
+	return (1U << ((msgctrl & PCIM_MSICTRL_MME_MASK) >> 4U));
+}
+
+static void reserve_vmsi_irte(struct pci_vdev *vdev, uint16_t msgctrl)
+{
+	struct intr_source intr_src;
+	uint16_t count = get_mmc(msgctrl);
+
+	if ((vdev->pdev->irte_count == 0U) && (vdev->pdev->irte_start != -EINVAL)) {
+		intr_src.is_msi = true;
+		intr_src.src.msi.value = vdev->pdev->bdf.value;
+		vdev->pdev->irte_start = dmar_reserve_irte(intr_src, count);
+		if (vdev->pdev->irte_start) {
+			vdev->pdev->irte_count = count;
+		}
+	}
+}
+
 /**
  * @brief Remap vMSI virtual address and data to MSI physical address and data
  * This function is called when physical MSI is disabled.
@@ -60,13 +89,15 @@ static inline void enable_disable_msi(const struct pci_vdev *vdev, bool enable)
  * @pre vdev->vpci->vm != NULL
  * @pre vdev->pdev != NULL
  */
-static void remap_vmsi(const struct pci_vdev *vdev)
+static void remap_vmsi(struct pci_vdev *vdev)
 {
 	struct ptirq_msi_info info = {};
 	union pci_bdf pbdf = vdev->pdev->bdf;
 	struct acrn_vm *vm = vdev->vpci->vm;
 	uint32_t capoff = vdev->msi.capoff;
 	uint32_t vmsi_msgdata, vmsi_addrlo, vmsi_addrhi = 0U;
+	uint16_t vector_count, i;
+	uint16_t msgctrl = pci_vdev_read_cfg_u16(vdev, vdev->msi.capoff + PCIR_MSI_CTRL);
 
 	/* Read the MSI capability structure from virtual device */
 	vmsi_addrlo = pci_vdev_read_cfg_u32(vdev, capoff + PCIR_MSI_ADDR);
@@ -79,19 +110,46 @@ static void remap_vmsi(const struct pci_vdev *vdev)
 	info.vmsi_addr.full = (uint64_t)vmsi_addrlo | ((uint64_t)vmsi_addrhi << 32U);
 	info.vmsi_data.full = vmsi_msgdata;
 
-	if (ptirq_prepare_msix_remap(vm, vdev->bdf.value, pbdf.value, 0U, &info) == 0) {
-		pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_ADDR, 0x4U, (uint32_t)info.pmsi_addr.full);
-		if (vdev->msi.is_64bit) {
-			pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_ADDR_HIGH, 0x4U,
-					(uint32_t)(info.pmsi_addr.full >> 32U));
-			pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_DATA_64BIT, 0x2U, (uint16_t)info.pmsi_data.full);
-		} else {
-			pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_DATA, 0x2U, (uint16_t)info.pmsi_data.full);
+	reserve_vmsi_irte(vdev, msgctrl);
+	vector_count = get_mme(msgctrl);
+
+	if ((vector_count > 1) && (vdev->pdev->irte_start == -EINVAL)) {
+		pr_err("IR not enabled when the device uses multi-vector MSI!!");
+	} else {
+		for(i = 0U; i < vector_count; i++) {
+			if (ptirq_prepare_msix_remap(vm, vdev->bdf.value, pbdf.value, i, &info,
+				vdev->pdev->irte_start + i) != 0) {
+				break;
+			}
+			/* only need to programe the device once */
+			if (i == 0U) {
+				if (vector_count > 1U) {
+					info.pmsi_addr.ir_bits.shv = 1U;
+				}
+
+				pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_ADDR, 0x4U, (uint32_t)info.pmsi_addr.full);
+				if (vdev->msi.is_64bit) {
+					pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_ADDR_HIGH, 0x4U,
+							(uint32_t)(info.pmsi_addr.full >> 32U));
+					pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_DATA_64BIT, 0x2U,
+							(uint16_t)info.pmsi_data.full);
+				} else {
+					pci_pdev_write_cfg(pbdf, capoff + PCIR_MSI_DATA, 0x2U,
+							(uint16_t)info.pmsi_data.full);
+				}
+			}
 		}
 
-		/* If MSI Enable is being set, make sure INTxDIS bit is set */
-		enable_disable_pci_intx(pbdf, false);
-		enable_disable_msi(vdev, true);
+		if (i == vector_count) {
+			/* If MSI Enable is being set, make sure INTxDIS bit is set */
+			enable_disable_pci_intx(pbdf, false);
+			enable_disable_msi(vdev, true);
+			vdev->msi.vector_enabled = vector_count;
+		} else {
+			/* TODO: free the previous allocated resource */
+			pr_err("%s: failed to prepare msi for device %x:%x.%x",
+			__func__, pbdf.bits.b, pbdf.bits.d, pbdf.bits.f);
+		}
 	}
 }
 
@@ -127,10 +185,17 @@ void vmsi_write_cfg(struct pci_vdev *vdev, uint32_t offset, uint32_t bytes, uint
  * @pre vdev->vpci != NULL
  * @pre vdev->vpci->vm != NULL
  */
-void deinit_vmsi(const struct pci_vdev *vdev)
+void deinit_vmsi(struct pci_vdev *vdev)
 {
+	uint32_t i;
+
+	pr_err("%s: for device %x:%x.%x", __func__, vdev->pdev->bdf.bits.b, vdev->pdev->bdf.bits.d, vdev->pdev->bdf.bits.f);
+
 	if (has_msi_cap(vdev)) {
-		ptirq_remove_msix_remapping(vdev->vpci->vm, vdev->bdf.value, 1U);
+		for (i = 0U; i < vdev->msi.vector_enabled; i++) {
+			ptirq_remove_msix_remapping(vdev->vpci->vm, vdev->bdf.value, i);
+		}
+		vdev->msi.vector_enabled = 0;
 	}
 }
 
@@ -149,9 +214,6 @@ void init_vmsi(struct pci_vdev *vdev)
 		val = pci_pdev_read_cfg(pdev->bdf, vdev->msi.capoff, 4U);
 		vdev->msi.caplen = ((val & (PCIM_MSICTRL_64BIT << 16U)) != 0U) ? 14U : 10U;
 		vdev->msi.is_64bit = ((val & (PCIM_MSICTRL_64BIT << 16U)) != 0U);
-
-		val &= ~((uint32_t)PCIM_MSICTRL_MMC_MASK << 16U);
-		val &= ~((uint32_t)PCIM_MSICTRL_MME_MASK << 16U);
 		pci_vdev_write_cfg(vdev, vdev->msi.capoff, 4U, val);
 	}
 }

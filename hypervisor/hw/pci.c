@@ -489,6 +489,8 @@ static void init_pdev(uint16_t pbdf, uint32_t drhd_index)
 			}
 
 			pdev->drhd_index = drhd_index;
+			pdev->irte_start = 0;
+			pdev->irte_count = 0U;
 
 			fill_pci_dev_config(pdev);
 

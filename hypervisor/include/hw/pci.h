@@ -181,6 +181,8 @@ struct pci_msix_cap {
 struct pci_pdev {
 	/* IOMMU responsible for DMA and Interrupt Remapping for this device */
 	uint32_t drhd_index;
+	int32_t irte_start;
+	uint16_t irte_count;
 
 	/* The bar info of the physical PCI device. */
 	uint32_t nr_bars; /* 6 for normal device, 2 for bridge, 1 for cardbus */
