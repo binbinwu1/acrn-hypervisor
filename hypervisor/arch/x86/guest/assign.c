@@ -90,19 +90,42 @@ static void ptirq_free_irte(const struct ptirq_remapping_info *entry)
 		intr_src.src.ioapic_id = ioapic_irq_to_ioapic_id(entry->allocated_pirq);
 	}
 
-	dmar_free_irte(intr_src, (uint16_t)entry->allocated_pirq);
+	dmar_free_irte(intr_src, (uint16_t)entry->irte_idx, entry->free_irte);
+}
+
+static void ptirq_build_irte(struct ptirq_remapping_info *entry, union dmar_ir_entry irte, int32_t irte_idx, bool is_msi)
+{
+	struct intr_source intr_src;
+
+	if (is_msi) {
+		intr_src.is_msi = true;
+		intr_src.src.msi.value = entry->phys_sid.msi_id.bdf;
+	} else {
+		intr_src.is_msi = false;
+		intr_src.src.ioapic_id = ioapic_irq_to_ioapic_id(entry->allocated_pirq);
+	}
+
+	/* if the entry already has a irte, resue it */
+	if (entry->irte_idx >= 0) {
+		(void)dmar_assign_irte(intr_src, irte, entry->irte_idx);
+	} else {
+		/* if irte_idx is valid, will use it directly, otherwise, allocate a new irte */
+		entry->irte_idx = dmar_assign_irte(intr_src, irte, irte_idx);
+		if ((irte_idx < 0) && (entry->irte_idx >= 0)) {
+			/* release the irte entry if it is new allocated */
+			entry->free_irte = true;
+		}
+	}
 }
 
 static void ptirq_build_physical_msi(struct acrn_vm *vm, struct ptirq_msi_info *info,
-		const struct ptirq_remapping_info *entry, uint32_t vector)
+		struct ptirq_remapping_info *entry, uint32_t vector, int32_t irte_idx)
 {
 	uint64_t vdmask, pdmask;
 	uint32_t dest, delmode, dest_mask;
 	bool phys;
 	union dmar_ir_entry irte;
 	union irte_index ir_index;
-	int32_t ret;
-	struct intr_source intr_src;
 
 	/* get physical destination cpu mask */
 	dest = info->vmsi_addr.bits.dest_field;
@@ -128,18 +151,15 @@ static void ptirq_build_physical_msi(struct acrn_vm *vm, struct ptirq_msi_info *
 	irte.bits.rh = MSI_ADDR_RH;
 	irte.bits.dest = dest_mask;
 
-	intr_src.is_msi = true;
-	intr_src.src.msi.value = entry->phys_sid.msi_id.bdf;
-	ret = dmar_assign_irte(intr_src, irte, (uint16_t)entry->allocated_pirq);
+	ptirq_build_irte(entry, irte, irte_idx, true);
 
-	if (ret == 0) {
+	if (entry->irte_idx >= 0) {
 		/*
 		 * Update the MSI interrupt source to point to the IRTE
-		 * SHV is set to 0 as ACRN disables MMC (Multi-Message Capable
-		 * for MSI devices.
+		 * SHV is set to 0 by default, multi-vector MSI will set it to 1 later.
 		 */
 		info->pmsi_data.full = 0U;
-		ir_index.index = (uint16_t)entry->allocated_pirq;
+		ir_index.index = (uint16_t)entry->irte_idx;
 
 		info->pmsi_addr.full = 0UL;
 		info->pmsi_addr.ir_bits.intr_index_high = ir_index.bits.index_high;
@@ -174,8 +194,6 @@ ptirq_build_physical_rte(struct acrn_vm *vm, struct ptirq_remapping_info *entry)
 	union source_id *virt_sid = &entry->virt_sid;
 	union irte_index ir_index;
 	union dmar_ir_entry irte;
-	struct intr_source intr_src;
-	int32_t ret;
 
 	if (virt_sid->intx_id.src == PTDEV_VPIN_IOAPIC) {
 		uint64_t vdmask, pdmask;
@@ -224,12 +242,10 @@ ptirq_build_physical_rte(struct acrn_vm *vm, struct ptirq_remapping_info *entry)
 		irte.bits.dest = dest_mask;
 		irte.bits.trigger_mode = rte.bits.trigger_mode;
 
-		intr_src.is_msi = false;
-		intr_src.src.ioapic_id = ioapic_irq_to_ioapic_id(phys_irq);
-		ret = dmar_assign_irte(intr_src, irte, (uint16_t)phys_irq);
+		ptirq_build_irte(entry, irte, -1, false);
 
-		if (ret == 0) {
-			ir_index.index = (uint16_t)phys_irq;
+		if (entry->irte_idx >= 0) {
+			ir_index.index = (uint16_t)entry->irte_idx;
 			rte.ir_bits.vector = vector;
 			rte.ir_bits.constant = 0U;
 			rte.ir_bits.intr_index_high = ir_index.bits.index_high;
@@ -338,7 +354,7 @@ remove_msix_remapping(const struct acrn_vm *vm, uint16_t virt_bdf, uint32_t entr
 
 		intr_src.is_msi = true;
 		intr_src.src.msi.value = entry->phys_sid.msi_id.bdf;
-		dmar_free_irte(intr_src, (uint16_t)entry->allocated_pirq);
+		dmar_free_irte(intr_src, entry->irte_idx, entry->free_irte);
 
 		dev_dbg(ACRN_DBG_IRQ,
 			"VM%d MSIX remove vector mapping vbdf-pbdf:0x%x-0x%x idx=%d",
@@ -439,7 +455,7 @@ static void remove_intx_remapping(struct acrn_vm *vm, uint32_t virt_pin, bool pi
 				intr_src.is_msi = false;
 				intr_src.src.ioapic_id = ioapic_irq_to_ioapic_id(phys_irq);
 
-				dmar_free_irte(intr_src, (uint16_t)phys_irq);
+				dmar_free_irte(intr_src, (uint16_t)phys_irq, entry->free_irte);
 				dev_dbg(ACRN_DBG_IRQ,
 					"deactive %s intx entry:ppin=%d, pirq=%d ",
 					pic_pin ? "vPIC" : "vIOAPIC",
@@ -602,7 +618,7 @@ void ptirq_intx_ack(struct acrn_vm *vm, uint32_t virt_pin, uint32_t vpin_src)
  * user must provide bdf and entry_nr
  */
 int32_t ptirq_prepare_msix_remap(struct acrn_vm *vm, uint16_t virt_bdf, uint16_t phys_bdf,
-				uint16_t entry_nr, struct ptirq_msi_info *info)
+				uint16_t entry_nr, struct ptirq_msi_info *info, int32_t irte_idx)
 {
 	struct ptirq_remapping_info *entry;
 	DEFINE_MSI_SID(virt_sid, virt_bdf, entry_nr);
@@ -645,13 +661,13 @@ int32_t ptirq_prepare_msix_remap(struct acrn_vm *vm, uint16_t virt_bdf, uint16_t
 				 * All the vCPUs are in x2APIC mode and LAPIC is Pass-through
 				 * Use guest vector to program the interrupt source
 				 */
-				ptirq_build_physical_msi(vm, info, entry, (uint32_t)info->vmsi_data.bits.vector);
+				ptirq_build_physical_msi(vm, info, entry, (uint32_t)info->vmsi_data.bits.vector, irte_idx);
 			} else if (vlapic_state == VM_VLAPIC_XAPIC) {
 				/*
 				 * All the vCPUs are in xAPIC mode and LAPIC is emulated
 				 * Use host vector to program the interrupt source
 				 */
-				ptirq_build_physical_msi(vm, info, entry, irq_to_vector(entry->allocated_pirq));
+				ptirq_build_physical_msi(vm, info, entry, irq_to_vector(entry->allocated_pirq), irte_idx);
 			} else if (vlapic_state == VM_VLAPIC_TRANSITION) {
 				/*
 				 * vCPUs are in middle of transition, so do not program interrupt source
@@ -665,7 +681,7 @@ int32_t ptirq_prepare_msix_remap(struct acrn_vm *vm, uint16_t virt_bdf, uint16_t
 				ret = -EFAULT;
 			}
 		} else {
-			ptirq_build_physical_msi(vm, info, entry, irq_to_vector(entry->allocated_pirq));
+			ptirq_build_physical_msi(vm, info, entry, irq_to_vector(entry->allocated_pirq), irte_idx);
 		}
 
 		if (ret == 0) {

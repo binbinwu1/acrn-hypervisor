@@ -35,6 +35,7 @@
 #include <io.h>
 #include <ept.h>
 #include <mmu.h>
+#include <vtd.h>
 #include <logmsg.h>
 #include "vpci_priv.h"
 
@@ -88,7 +89,8 @@ static void remap_one_vmsix_entry(const struct pci_vdev *vdev, uint32_t index)
 		info.vmsi_addr.full = vdev->msix.table_entries[index].addr;
 		info.vmsi_data.full = vdev->msix.table_entries[index].data;
 
-		ret = ptirq_prepare_msix_remap(vdev->vpci->vm, vdev->bdf.value, vdev->pdev->bdf.value, (uint16_t)index, &info);
+		ret = ptirq_prepare_msix_remap(vdev->vpci->vm, vdev->bdf.value, vdev->pdev->bdf.value,
+			(uint16_t)index, &info, -1);
 		if (ret == 0) {
 			/* Write the table entry to the physical structure */
 			pentry = get_msix_table_entry(vdev, index);
