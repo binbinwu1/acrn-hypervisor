@@ -104,6 +104,8 @@ static inline uint64_t dmar_set_bitslice(uint64_t var, uint64_t mask, uint32_t p
 #define DMAR_IR_ENABLE_EIM_SHIFT	11UL
 #define DMAR_IR_ENABLE_EIM		(1UL << DMAR_IR_ENABLE_EIM_SHIFT)
 
+#define IRTE_ALLOC_BITMAP_SIZE	INT_DIV_ROUNDUP(CONFIG_MAX_IR_ENTRIES, 64U)
+
 enum dmar_cirg_type {
 	DMAR_CIRG_RESERVED = 0,
 	DMAR_CIRG_GLOBAL,
@@ -127,6 +129,7 @@ struct dmar_drhd_rt {
 
 	uint64_t root_table_addr;
 	uint64_t ir_table_addr;
+	uint64_t irte_alloc_bitmap[IRTE_ALLOC_BITMAP_SIZE];
 	uint64_t qi_queue;
 	uint16_t qi_tail;
 
@@ -1361,33 +1364,96 @@ int32_t init_iommu(void)
 	return ret;
 }
 
-int32_t dmar_assign_irte(struct intr_source intr_src, union dmar_ir_entry irte, uint16_t index)
+static inline struct dmar_drhd_rt* get_dmar_ir(struct intr_source intr_src, union pci_bdf *sid)
 {
-	struct dmar_drhd_rt *dmar_unit;
-	union dmar_ir_entry *ir_table, *ir_entry;
-	union pci_bdf sid;
-	uint64_t trigger_mode;
-	int32_t ret = 0;
+	int ret;
+	struct dmar_drhd_rt* dmar_unit;
 
 	if (intr_src.is_msi) {
 		dmar_unit = device_to_dmaru((uint8_t)intr_src.src.msi.bits.b, intr_src.src.msi.fields.devfun);
-		sid.value = intr_src.src.msi.value;
-		trigger_mode = 0x0UL;
+		sid->value = intr_src.src.msi.value;
 	} else {
-		dmar_unit = ioapic_to_dmaru(intr_src.src.ioapic_id, &sid);
-		trigger_mode = irte.bits.trigger_mode;
+		dmar_unit = ioapic_to_dmaru(intr_src.src.ioapic_id, sid);
 	}
 
 	if (dmar_unit == NULL) {
-		pr_err("no dmar unit found for device: %x:%x.%x", sid.bits.b, sid.bits.d, sid.bits.f);
+		pr_err("no dmar unit found for device: %x:%x.%x", sid->bits.b, sid->bits.d, sid->bits.f);
 		ret = -EINVAL;
 	} else if (dmar_unit->drhd->ignore) {
-		dev_dbg(ACRN_DBG_IOMMU, "device is ignored :0x%x:%x.%x", sid.bits.b, sid.bits.d, sid.bits.f);
+		dev_dbg(ACRN_DBG_IOMMU, "device is ignored :0x%x:%x.%x", sid->bits.b, sid->bits.d, sid->bits.f);
 		ret = -EINVAL;
 	} else if (dmar_unit->ir_table_addr == 0UL) {
 		pr_err("IR table is not set for dmar unit");
 		ret = -EINVAL;
 	} else {
+		ret = 0;
+	}
+
+	if (ret == 0)
+		return dmar_unit;
+	else
+		return NULL;
+}
+
+static uint16_t alloc_irte(struct dmar_drhd_rt *dmar_unit, uint16_t count)
+{
+	uint64_t *test_bitmap_64bit;
+	uint64_t irte_idx;
+	uint64_t test_mask = (1UL << count) - 1;
+	uint16_t tmp_count = 0UL;
+	uint64_t rflags;
+
+	test_bitmap_64bit = dmar_unit->irte_alloc_bitmap;
+	spinlock_irqsave_obtain(&dmar_unit->lock, &rflags);
+	for(irte_idx = 0UL; irte_idx < CONFIG_MAX_IR_ENTRIES; irte_idx += count) {
+		if ((*test_bitmap_64bit & (test_mask << tmp_count)) == 0UL) {
+			*test_bitmap_64bit |= (test_mask << tmp_count);
+			break;
+		}
+		tmp_count += count;
+		if (tmp_count == 64U) {
+			test_bitmap_64bit++;
+			tmp_count = 0;
+		}
+	}
+	spinlock_irqrestore_release(&dmar_unit->lock, rflags);
+
+	/* TODO: how to garauntee that it will not out of irte? */
+	ASSERT(irte_idx < CONFIG_MAX_IR_ENTRIES, "out of irte");
+
+	return irte_idx;
+}
+
+int32_t dmar_reserve_irte(struct intr_source intr_src, uint16_t count)
+{
+	struct dmar_drhd_rt *dmar_unit;
+	union pci_bdf sid;
+	int ret = -EINVAL;
+
+	dmar_unit = get_dmar_ir(intr_src, &sid);
+	if (dmar_unit != NULL) {
+		ret = alloc_irte(dmar_unit, count);
+	}
+	pr_dbg("%s: for dev 0x%x:%x.%x, reserve %u entry for MSI(%d), start from %d",
+		__func__, sid.bits.b, sid.bits.d, sid.bits.f, count, intr_src.is_msi, ret);
+	return ret;
+}
+
+int32_t dmar_assign_irte(struct intr_source intr_src, union dmar_ir_entry irte, int32_t index)
+{
+	struct dmar_drhd_rt *dmar_unit;
+	union dmar_ir_entry *ir_table, *ir_entry;
+	union pci_bdf sid;
+	uint64_t trigger_mode;
+	int32_t new_index = -EINVAL;
+
+	if (intr_src.is_msi) {
+		trigger_mode = 0x0UL;
+	} else {
+		trigger_mode = irte.bits.trigger_mode;
+	}
+	dmar_unit = get_dmar_ir(intr_src, &sid);
+	if (dmar_unit != NULL) {
 		dmar_enable_intr_remapping(dmar_unit);
 		irte.bits.svt = 0x1UL;
 		irte.bits.sq = 0x0UL;
@@ -1397,42 +1463,47 @@ int32_t dmar_assign_irte(struct intr_source intr_src, union dmar_ir_entry irte, 
 		irte.bits.trigger_mode = trigger_mode;
 		irte.bits.fpd = 0x0UL;
 		ir_table = (union dmar_ir_entry *)hpa2hva(dmar_unit->ir_table_addr);
-		ir_entry = ir_table + index;
+		if (index < 0) {
+			new_index = alloc_irte(dmar_unit, 1U);
+		} else {
+			new_index = index;
+		}
+		ir_entry = ir_table + new_index;
 		ir_entry->entry.hi_64 = irte.entry.hi_64;
 		ir_entry->entry.lo_64 = irte.entry.lo_64;
 
 		iommu_flush_cache(ir_entry, sizeof(union dmar_ir_entry));
-		dmar_invalid_iec(dmar_unit, index, 0U, false);
+		dmar_invalid_iec(dmar_unit, new_index, 0U, false);
 	}
-	return ret;
+
+	pr_dbg("%s: for dev 0x%x:%x.%x, assign entry for MSI(%d), idx %d, hint (%d)",
+		__func__, sid.bits.b, sid.bits.d, sid.bits.f, intr_src.is_msi, new_index, index);
+
+	return new_index;
 }
 
-void dmar_free_irte(struct intr_source intr_src, uint16_t index)
+void dmar_free_irte(struct intr_source intr_src, uint16_t index, bool to_free)
 {
 	struct dmar_drhd_rt *dmar_unit;
 	union dmar_ir_entry *ir_table, *ir_entry;
 	union pci_bdf sid;
+	uint64_t rflags;
 
-	if (intr_src.is_msi) {
-		dmar_unit = device_to_dmaru((uint8_t)intr_src.src.msi.bits.b, intr_src.src.msi.fields.devfun);
-	} else {
-		dmar_unit = ioapic_to_dmaru(intr_src.src.ioapic_id, &sid);
-	}
-
-	if (dmar_unit == NULL) {
-		pr_err("no dmar unit found for device: %x:%x.%x", intr_src.src.msi.bits.b,
-			intr_src.src.msi.bits.d, intr_src.src.msi.bits.f);
-	} else if (dmar_unit->drhd->ignore) {
-		dev_dbg(ACRN_DBG_IOMMU, "device is ignored :0x%x:%x.%x", intr_src.src.msi.bits.b,
-			intr_src.src.msi.bits.d, intr_src.src.msi.bits.f);
-	} else if (dmar_unit->ir_table_addr == 0UL) {
-		pr_err("IR table is not set for dmar unit");
-	} else {
+	dmar_unit = get_dmar_ir(intr_src, &sid);
+	if (dmar_unit != NULL) {
 		ir_table = (union dmar_ir_entry *)hpa2hva(dmar_unit->ir_table_addr);
 		ir_entry = ir_table + index;
 		ir_entry->bits.present = 0x0UL;
 
 		iommu_flush_cache(ir_entry, sizeof(union dmar_ir_entry));
 		dmar_invalid_iec(dmar_unit, index, 0U, false);
+
+		if (to_free) {
+			spinlock_irqsave_obtain(&dmar_unit->lock, &rflags);
+			bitmap_test_and_clear_nolock(index & 0x3FU, dmar_unit->irte_alloc_bitmap + (index >> 6U));
+			spinlock_irqrestore_release(&dmar_unit->lock, rflags);
+			pr_dbg("%s: for dev 0x%x:%x.%x, free entry for MSI(%d), index %d",
+				__func__, sid.bits.b, sid.bits.d, sid.bits.f, intr_src.is_msi, index);
+		}
 	}
 }

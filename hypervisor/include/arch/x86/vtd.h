@@ -657,6 +657,9 @@ int32_t init_iommu(void);
  */
 bool iommu_snoop_supported(const struct iommu_domain *iommu);
 
+
+int32_t dmar_reserve_irte(struct intr_source intr_src, uint16_t count);
+
 /**
  * @brief Assign RTE for Interrupt Remapping Table.
  *
@@ -668,7 +671,7 @@ bool iommu_snoop_supported(const struct iommu_domain *iommu);
  * @retval 0 otherwise
  *
  */
-int32_t dmar_assign_irte(struct intr_source intr_src, union dmar_ir_entry irte, uint16_t index);
+int32_t dmar_assign_irte(struct intr_source intr_src, union dmar_ir_entry irte, int32_t index);
 
 /**
  * @brief Free RTE for Interrupt Remapping Table.
@@ -677,7 +680,7 @@ int32_t dmar_assign_irte(struct intr_source intr_src, union dmar_ir_entry irte, 
  * @param[in] index into Interrupt Remapping Table
  *
  */
-void dmar_free_irte(struct intr_source intr_src, uint16_t index);
+void dmar_free_irte(struct intr_source intr_src, uint16_t index, bool to_free);
 
 /**
  * @brief Flash cacheline(s) for a specific address with specific size.
