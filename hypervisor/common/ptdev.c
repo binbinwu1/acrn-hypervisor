@@ -90,6 +90,7 @@ struct ptirq_remapping_info *ptirq_alloc_entry(struct acrn_vm *vm, uint32_t intr
 		entry->intr_type = intr_type;
 		entry->vm = vm;
 		entry->intr_count = 0UL;
+		entry->irte_idx = -1;
 
 		INIT_LIST_HEAD(&entry->softirq_node);
 

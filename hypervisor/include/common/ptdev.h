@@ -121,6 +121,8 @@ struct ptirq_remapping_info {
 	union source_id virt_sid;
 	struct acrn_vm *vm;
 	bool active;	/* true=active, false=inactive*/
+	int32_t irte_idx;
+	bool free_irte;
 	uint32_t allocated_pirq;
 	uint32_t polarity; /* 0=active high, 1=active low*/
 	struct list_head softirq_node;
