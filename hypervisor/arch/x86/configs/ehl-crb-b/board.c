@@ -155,3 +155,12 @@ const struct cpu_state_table board_cpu_state_tbl = {
 	(uint8_t)ARRAY_SIZE(board_cpu_cx), board_cpu_cx}
 };
 const union pci_bdf plat_hidden_pdevs[MAX_HIDDEN_PDEVS_NUM];
+
+#define VMSIX_ON_MSI_DEV0		.bdf.bits = {.b = 0x00U, .d = 0x1d, .f = 0x01U},
+#define VMSIX_ON_MSI_DEV1		.bdf.bits = {.b = 0x00U, .d = 0x1d, .f = 0x02U},
+#define VMSIX_ON_MSI_DEV2		.bdf.bits = {.b = 0x00U, .d = 0x1e, .f = 0x04U},
+const struct vmsix_on_msi_info vmsix_on_msi_devs[MAX_VMSIX_ON_MSI_PDEVS_NUM] = {
+       {VMSIX_ON_MSI_DEV0},
+       {VMSIX_ON_MSI_DEV1},
+       {VMSIX_ON_MSI_DEV2},
+};
