@@ -213,6 +213,7 @@ int32_t vmsix_handle_table_mmio_access(struct io_request *io_req, void *handler_
 			/* According to PCI spec, PBA is read-only.
 			 * Don't emulate PBA according to the device status, just return 0.
 			 */
+			pr_err("!!Access Emulated PBA!!");
 			if (mmio->direction == REQUEST_READ) {
 				mmio->value = 0UL;
 			} else {

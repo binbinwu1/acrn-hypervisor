@@ -1312,7 +1312,7 @@ int32_t dmar_reserve_irte(const struct intr_source *intr_src, uint16_t num, uint
 		ret = 0;
 	}
 
-	pr_dbg("%s: for dev 0x%x:%x.%x, reserve %u entry for MSI(%d), start from %d",
+	pr_err("%s: for dev 0x%x:%x.%x, reserve %u entry for MSI(%d), start from %d",
 		__func__, sid.bits.b, sid.bits.d, sid.bits.f, num, intr_src->is_msi, *start_id);
 	return ret;
 }
@@ -1342,6 +1342,8 @@ int32_t dmar_assign_irte(const struct intr_source *intr_src, union dmar_ir_entry
 		*idx_out = idx_in;
 		if (idx_in == INVALID_IRTE_ID) {
 			*idx_out = alloc_irtes(dmar_unit, 1U);
+				pr_err("%s: for dev 0x%x:%x.%x, alloc entry[%d] for MSI(%d)",
+					__func__, sid.bits.b, sid.bits.d, sid.bits.f, *idx_out, intr_src->is_msi);
 		}
 		if (*idx_out < CONFIG_MAX_IR_ENTRIES) {
 			ir_entry = ir_table + *idx_out;

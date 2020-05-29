@@ -55,6 +55,9 @@ static void vdev_pt_unmap_msix(struct pci_vdev *vdev)
 		addr_lo = round_page_down(addr_lo);
 		addr_hi = round_page_up(addr_hi);
 		unregister_mmio_emulation_handler(vpci2vm(vdev->vpci), addr_lo, addr_hi);
+		if (vdev->pdev->bdf.value==0xEA || vdev->pdev->bdf.value==0xE9 || vdev->pdev->bdf.value==0xF4)
+			pr_err("DEV[%x:%x.%x] un-register mmio 0x%lx, size=0x%lx",
+				vdev->pdev->bdf.bits.b,vdev->pdev->bdf.bits.d, vdev->pdev->bdf.bits.f, addr_lo, addr_hi - addr_lo);
 		msix->mmio_gpa = 0UL;
 	}
 }
@@ -81,6 +84,9 @@ void vdev_pt_map_msix(struct pci_vdev *vdev, bool hold_lock)
 				addr_lo, addr_hi, vdev, hold_lock);
 		ept_del_mr(vm, (uint64_t *)vm->arch_vm.nworld_eptp, addr_lo, addr_hi - addr_lo);
 		msix->mmio_gpa = vbar->base_gpa;
+		if (vdev->pdev->bdf.value==0xEA || vdev->pdev->bdf.value==0xE9 || vdev->pdev->bdf.value==0xF4)
+			pr_err("DEV[%x:%x.%x] register mmio 0x%lx, size=0x%lx",
+				vdev->pdev->bdf.bits.b,vdev->pdev->bdf.bits.d, vdev->pdev->bdf.bits.f, addr_lo, addr_hi - addr_lo);
 	}
 }
 
@@ -101,6 +107,12 @@ static void vdev_pt_unmap_mem_vbar(struct pci_vdev *vdev, uint32_t idx)
 	}
 
 	if ((has_msix_cap(vdev) && (idx == vdev->msix.table_bar))) {
+
+		if (vbar->base_gpa != 0UL)
+		if (vdev->pdev->bdf.value==0xEA || vdev->pdev->bdf.value==0xE9 || vdev->pdev->bdf.value==0xF4)
+			pr_err("DEV[%x:%x.%x] Delete EPT GPA 0x%lx, size=0x%lx",
+				vdev->pdev->bdf.bits.b,vdev->pdev->bdf.bits.d, vdev->pdev->bdf.bits.f, vbar->base_gpa, vbar->size);
+
 		vdev_pt_unmap_msix(vdev);
 	}
 }
@@ -124,6 +136,10 @@ static void vdev_pt_map_mem_vbar(struct pci_vdev *vdev, uint32_t idx)
 	}
 
 	if (has_msix_cap(vdev) && (idx == vdev->msix.table_bar)) {
+		if (vbar->base_gpa != 0UL)
+		if (vdev->pdev->bdf.value==0xEA || vdev->pdev->bdf.value==0xE9 || vdev->pdev->bdf.value==0xF4)
+			pr_err("DEV[%x:%x.%x] Add EPT GPA 0x%lx, size=0x%lx",
+				vdev->pdev->bdf.bits.b,vdev->pdev->bdf.bits.d, vdev->pdev->bdf.bits.f, vbar->base_gpa, vbar->size);
 		vdev_pt_map_msix(vdev, true);
 	}
 }
