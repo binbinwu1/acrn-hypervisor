@@ -518,6 +518,17 @@ int32_t create_vm(uint16_t vm_id, uint64_t pcpu_bitmap, struct acrn_vm_config *v
 		(void)memset(vm->arch_vm.nworld_eptp, 0U, PAGE_SIZE);
 	}
 
+	if (is_rt_vm(vm)) {
+		/* expose host bridge MMIO for memory bandwith monitoring */
+		ept_del_mr(vm, (uint64_t *)vm->arch_vm.nworld_eptp, 0xFED15000, 4096);
+		ept_add_mr(vm, (uint64_t *)vm->arch_vm.nworld_eptp, 0xFED15000, 0xFED15000, 4096, EPT_RWX | EPT_UNCACHED);
+
+		// ept_del_mr(vm, (uint64_t *)vm->arch_vm.nworld_eptp, 0x80000000, 4096);
+		// ept_add_mr(vm, (uint64_t *)vm->arch_vm.nworld_eptp, hpa_tmp, 0x80000000, 4096, EPT_RWX | EPT_WB | EPT_IGNORE_PAT);
+		// //ept_modify_mr(vm, (uint64_t *)vm->arch_vm.nworld_eptp, 0x80000000, 4096, EPT_IGNORE_PAT, 0);
+		// pr_err("%s: ignore PAT for rtvm 0x80000000 -> hpa 0x%llx",__func__, (uint64_t)gpa2hpa(vm, 0x80000000));
+	}
+
 	return status;
 }
 

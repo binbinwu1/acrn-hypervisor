@@ -384,6 +384,7 @@ static int32_t wbinvd_vmexit_handler(struct acrn_vcpu *vcpu)
 
 	if (has_rt_vm() == false) {
 		cache_flush_invalidate_all();
+		pr_err("%s: wbinvd !!!!!!!!", __func__);
 	} else {
 		if (is_rt_vm(vcpu->vm)) {
 			walk_ept_table(vcpu->vm, ept_flush_leaf_page);

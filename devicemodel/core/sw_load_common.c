@@ -77,7 +77,13 @@ const struct e820_entry e820_default_entries[NUM_E820_ENTRIES] = {
 
 	{	/* 1MB to lowmem */
 		.baseaddr = 0x100000,
-		.length   = 0x48f00000,
+		.length   = 0x100000,
+		.type     = E820_TYPE_RESERVED
+	},
+
+	{	/* 1MB to lowmem */
+		.baseaddr = 0x200000,
+		.length   = 0x48e00000,
 		.type     = E820_TYPE_RAM
 	},
 

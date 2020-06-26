@@ -20,6 +20,9 @@ void vcpu_thread(struct thread_object *obj)
 	struct acrn_vcpu *vcpu = container_of(obj, struct acrn_vcpu, thread_obj);
 	uint32_t basic_exit_reason = 0U;
 	int32_t ret = 0;
+	volatile uint64_t *vmexit_rt;
+
+	vmexit_rt = (uint64_t *)gpa2hva(vcpu->vm, 0x100000);
 
 	do {
 		if (!is_lapic_pt_enabled(vcpu)) {
@@ -43,6 +46,12 @@ void vcpu_thread(struct thread_object *obj)
 		reset_event(&vcpu->events[VCPU_EVENT_VIRTUAL_INTERRUPT]);
 		profiling_vmenter_handler(vcpu);
 
+		if (is_rt_vm(vcpu->vm) && (vcpu->vcpu_id == 1U)) {
+			stac();
+			vmexit_rt[4] = rdtsc();
+			clac();
+		}
+
 		TRACE_2L(TRACE_VM_ENTER, 0UL, 0UL);
 		ret = run_vcpu(vcpu);
 		if (ret != 0) {
@@ -55,6 +64,16 @@ void vcpu_thread(struct thread_object *obj)
 		TRACE_2L(TRACE_VM_EXIT, basic_exit_reason, vcpu_get_rip(vcpu));
 
 		vcpu->arch.nrexits++;
+
+		if (is_rt_vm(vcpu->vm) && (vcpu->vcpu_id == 1U)) {
+			stac();
+			vmexit_rt[3] = rdtsc();
+			vmexit_rt[0] = vcpu->arch.nrexits;
+			vmexit_rt[1] = basic_exit_reason;
+			vmexit_rt[2] = 0;
+			clac();
+		}
+
 
 		profiling_pre_vmexit_handler(vcpu);
 

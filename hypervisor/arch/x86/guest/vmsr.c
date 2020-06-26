@@ -435,6 +435,14 @@ int32_t rdmsr_vmexit_handler(struct acrn_vcpu *vcpu)
 	/* Read the msr value */
 	msr = (uint32_t)vcpu_get_gpreg(vcpu, CPU_REG_RCX);
 
+	if (is_rt_vm(vcpu->vm) && (vcpu->vcpu_id == 1U)) {
+		volatile uint64_t *vmexit_msr;
+		stac();
+		vmexit_msr = (uint64_t *)gpa2hva(vcpu->vm, 0x100010UL);
+		*vmexit_msr = msr;
+		clac();
+	}
+
 	/* Do the required processing for each msr case */
 	switch (msr) {
 #ifdef CONFIG_HYPERV_ENABLED
@@ -747,6 +755,15 @@ int32_t wrmsr_vmexit_handler(struct acrn_vcpu *vcpu)
 
 	/* Read the MSR ID */
 	msr = (uint32_t)vcpu_get_gpreg(vcpu, CPU_REG_RCX);
+
+
+	if (is_rt_vm(vcpu->vm) && (vcpu->vcpu_id == 1U)) {
+		volatile uint64_t *vmexit_msr;
+		stac();
+		vmexit_msr = (uint64_t *)gpa2hva(vcpu->vm, 0x100010UL);
+		*vmexit_msr = msr;
+		clac();
+	}
 
 	/* Get the MSR contents */
 	v = (vcpu_get_gpreg(vcpu, CPU_REG_RDX) << 32U) |

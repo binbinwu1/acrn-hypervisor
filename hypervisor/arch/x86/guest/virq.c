@@ -240,7 +240,7 @@ static bool vcpu_inject_exception(struct acrn_vcpu *vcpu)
 
 	if (bitmap_test_and_clear_lock(ACRN_REQUEST_EXCP, &vcpu->arch.pending_req)) {
 		uint32_t vector = vcpu->arch.exception_info.exception;
-	
+
 		if ((exception_type[vector] & EXCEPTION_ERROR_CODE_VALID) != 0U) {
 			exec_vmwrite32(VMX_ENTRY_EXCEPTION_ERROR_CODE,
 					vcpu->arch.exception_info.error);
@@ -513,6 +513,14 @@ int32_t exception_vmexit_handler(struct acrn_vcpu *vcpu)
 				int_err_code |= 4U;
 			}
 		}
+	}
+
+	if (is_rt_vm(vcpu->vm) && (vcpu->vcpu_id == 1U)) {
+		volatile uint64_t *vmexit_vector;
+		stac();
+		vmexit_vector = (uint64_t *)gpa2hva(vcpu->vm, 0x100010UL);
+		*vmexit_vector = exception_vector;
+		clac();
 	}
 
 	/* Handle all other exceptions */
