@@ -363,6 +363,11 @@ int32_t set_vcpuid_entries(struct acrn_vm *vm)
 			/* These features are disabled */
 			/* PMU is not supported */
 			case 0x0aU:
+				if (is_rt_vm(vm) || is_sos_vm(vm)) {
+					init_vcpuid_entry(i, 0U, 0U, &entry);
+					result = set_vcpuid_entry(vm, &entry);
+				}
+				break;
 			/* Intel RDT */
 			case 0x0fU:
 			case 0x10U:
